@@ -1,10 +1,6 @@
 local global = getgenv and getgenv() or _G
 local key = "FFAutoplayLib"
 
-if global[key] then
-	return global[key]
-end
-
 local settings = {
 	Version = "1.01", -- autoplayer version
 
@@ -275,6 +271,7 @@ end
 local plr = game:GetService("Players").LocalPlayer
 local pgui = plr:WaitForChild("PlayerGui", 9e9)
 local rs = game:GetService("RunService")
+local uis = game:GetService("UserInputService")
 local kk = Enum.KeyCode
 local vim = game:GetService("VirtualInputManager")
 local rse = rs.RenderStepped
@@ -568,6 +565,12 @@ local offsets = {
 	Miss = 0.3
 }
 
+for i, v in offsets do
+	if i ~= "Miss" then
+		offsets[i] = v - 0.01
+	end
+end
+
 local downKeys, keys = { }, { }
 local ske = vim.SendKeyEvent
 
@@ -603,7 +606,7 @@ local function pressKey(key, duration)
 	local kk = kk:FromName(key)
 	if downKeys[key] then
 		downKeys[key] = false
-		press(key, false)
+		press(kk, false)
 	end
 
 	if kpsCount(key) then return end
@@ -993,6 +996,19 @@ spawn(function()
 	if hasWindow then
 		message:Fire("Unable to start the autoplay:\nScript must be ran before the game starts")
 	end
+	
+	local key = kk.RightAlt
+	uis.InputBegan:Connect(function(kk)
+		if kk == key then
+			pressed = true
+		end
+	end)
+	
+	press(key, true)
+	press(key, false)
+    r(10)
+
+    warn("Press check:", pressed)
 end)
 
 pgui.ChildAdded:Connect(onWindow)
