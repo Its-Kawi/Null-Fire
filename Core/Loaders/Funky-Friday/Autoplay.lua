@@ -902,8 +902,7 @@ end
 smt(settings, {
 	__index = function(self, key)
 		return key == "Events" and events or events[key]
-	end,
-	__metatable = getmetatable(game)
+	end
 })
 
 global[key] = settings
