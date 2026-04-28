@@ -7,7 +7,7 @@ end
 
 local settings = {
 	Version = "1.0", -- autoplayer version
-	
+
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
 	CopyEnemyNotes = false, -- I find this stupid
@@ -68,6 +68,7 @@ local cn = false
 local perf = 0
 local chances = settings.Chances
 local rendered, total = 0, 0
+local renderedOnLanes = { }
 
 local tick = tick
 local game, workspace = game, workspace
@@ -178,14 +179,14 @@ local keybindsChanged = newEvent()
 
 local events = { -- not actually only events
 	Message = message,
-	
+
 	NoteAdded = note,
 	NoteRemoved = noteRemoved,
-	
+
 	KeybindsChanged = keybindsChanged,
-	
+
 	SettingChanged = settingChanged, --setting, value
-	
+
 	GameStarted = gameStarted,
 	GameEnded = gameEnded,
 }
@@ -291,14 +292,14 @@ spawn(function()
 		lastDelta = r()
 		fps = 1 / lastDelta
 		psick = fps > 20 and settings.PerfectSick or 0
-		
+
 		local ffps = max(round(fps), 1)
 		while #fpsBuffer >= ffps do
 			remove(fpsBuffer, 1)
 		end
 
 		insert(fpsBuffer, fps)
-		
+
 		estFps = 0
 		for i, v in fpsBuffer do
 			estFps += v
@@ -306,14 +307,9 @@ spawn(function()
 
 		estFps = clamp(round((estFps / #fpsBuffer) * 10) / 10, 0, 2e9)
 
-		local estFpsS = tostring(estFps)
-		if not estFpsS:find("%.") then
-			estFpsS ..= ".0"
-		end
-
 		settings.FPS = estFps
 		local ros = { }
-		
+
 		for _, v in readonlyStats do
 			ros[v] = settings[v]
 			settings[v] = 0
@@ -401,12 +397,12 @@ events.Keybinds = kbs
 local function refreshKbs(t)
 	wait(t or 0)
 	kbs = getUnrepeated(kbVals)
-	
+
 	local newKbs = concat(kbs, ",")
 	if newKbs ~= lastKbs then
 		lastKbs = newKbs
 		settingChanged:Fire("Keybinds", kbs)
-		
+
 		events.Keybinds = kbs
 		events.KeybindsChanged:Fire(kbs)
 	end
@@ -429,20 +425,23 @@ end
 local rolled = { }
 local function noteAdded(v, notest, mine)
 	note:Fire(v, mine)
+
 	insert(notest, v)
-	
+
 	total += 1
-	
+
+	renderedOnLanes[notest] = (renderedOnLanes[notest] or 0) + 1
 	settings.NotesRendered += 1
 	rendered += 1
 
-	v.Visible = perf <= 4
+	v.Visible = perf <= 4 or renderedOnLanes[notest] < 7 or total % 7 == 0 -- because of multiplie lanes it will show really low amount of notes
 	v:GetPropertyChangedSignal("Parent"):Wait()
 	noteRemoved:Fire(v, mine)
 
+	renderedOnLanes[notest] -= 1
 	settings.NotesRendered -= 1
 	rendered -= 1
-	
+
 	rolled[v] = nil
 	hit[v] = false
 
@@ -631,6 +630,8 @@ local function roll(note)
 end
 
 local speed = 4 -- = 1
+local speedBuffer = { }
+
 local function canHit(note, receptor)
 	local x = UDimToVector2(receptor.Position) + v2(0.5, 0.5, 0)
 	local y = UDimToVector2(note.Position)
@@ -646,10 +647,18 @@ local function canHit(note, receptor)
 end
 
 local one = UDim2.fromScale(1, 1)
+local lastOffset = 0
+
+spawn(function()
+	while true do
+		lastOffset = (wait(0.1) - 0.1) * 2
+	end
+end)
+
 local function hitNote(note, key, dist, sick)
 	local t = dist * psick
 	if t > 0 then
-		wait(t)
+		wait(t - lastOffset)
 	end
 
 	if hit[note] then return end
@@ -704,6 +713,7 @@ local function hitLane(lane, laneIndex, receptor)
 	end
 end
 
+local notified = false
 local function calculateNotes(notes)
 	local start
 	for laneIndex, lane in notes do
@@ -720,11 +730,32 @@ local function calculateNotes(notes)
 			break
 		end
 	end
+	
+	if not start then return r() end -- no notes
 
 	local delta = r()
-	if not start then return end -- no notes
-
-	speed = getDistance(start[1], UDimToVector2(start[2].Position) - (start[3] - UDimToVector2(start[4].Position))) / delta
+	local travel = UDimToVector2(start[4].Position) - start[3]
+	if travel.Magnitude > 0.01 and not notified then
+		notified = true
+		message:Fire("Autoplayer might have issues with ModCharts!")
+	end
+	
+	local gotSpeed = getDistance(start[1], UDimToVector2(start[2].Position) - travel) / delta
+	if gotSpeed < 17 and gotSpeed > 3 then
+		while #speedBuffer >= fps do
+			remove(speedBuffer, 1)
+		end
+		
+		insert(speedBuffer, gotSpeed)
+		
+		local avgSpeed = 0
+		for i, v in speedBuffer do
+			avgSpeed += v
+		end
+		
+		speed = avgSpeed / #speedBuffer
+	end
+	
 	for laneIndex, lane in notes do
 		spawn(hitLane, lane, laneIndex, receptors[laneIndex])
 	end
@@ -797,7 +828,7 @@ local function statsAdded(stats, cons)
 		row.Name = safeName
 		row.LayoutOrder = isFirst and -999 or 999 + totalRows
 		row.Parent = stats
-		
+
 		totalRows += 1
 
 		local label = row.Label
@@ -813,7 +844,7 @@ local function statsAdded(stats, cons)
 				row.Visible = false
 			end
 		end
-		
+
 		rows[safeName] = fn
 		return fn
 	end
@@ -823,7 +854,7 @@ local function statsAdded(stats, cons)
 	addRow("Rendered")
 	addRow("Autoplay KPS")
 	addRow("FPS")
-	
+
 	cons[#cons + 1] = rse:Connect(function()
 		local hs = settings.MoreStats
 		if hs then
@@ -844,9 +875,17 @@ local function set3d(enabled)
 	rs:Set3dRenderingEnabled(enabled)
 end
 
+local black = Instance.new("Frame")
+black.BackgroundColor3 = c3()
+black.Size = UDim2.fromScale(2, 2)
+black.Position = UDim2.fromScale(0.5, 0.5)
+black.AnchorPoint = Vector2.new(0.5, 0.5)
+black.Visible = false
+black.ZIndex = -999
+
 local function onWindow(window, dontStartAutoplay)
 	if window.Name ~= "Window" then return end
-	
+
 	gameStarted:Fire()
 
 	lanes = 0
@@ -862,7 +901,7 @@ local function onWindow(window, dontStartAutoplay)
 		Left = fields:WaitForChild("Left", 9e9),
 		Right = fields:WaitForChild("Right", 9e9)
 	}
-	
+
 	spawn(mainLoop, fields, window, dontStartAutoplay)
 
 	local hud = gameField:WaitForChild("HUD", 9e9)
@@ -875,10 +914,13 @@ local function onWindow(window, dontStartAutoplay)
 			statsAdded(child, cons)
 		end
 	end)
-	
+
 	local mySide = fields[side]
 	local enemySide = fields[side == "Left" and "Right" or "Left"]
 	local accuracy = hud:WaitForChild("AccuracyGauge", 9e9):WaitForChild("Ticks", 9e9)
+
+	local black = black:Clone()
+	black.Parent = window
 
 	local function perfc(setting, value)
 		if setting ~= "Performance" then return end
@@ -886,6 +928,8 @@ local function onWindow(window, dontStartAutoplay)
 		mySide.Visible = value <= 5
 		enemySide.Visible = value <= 2
 		accuracy.Visible = value <= 1
+		black.Visible = value >= 3
+
 		pcall(set3d, value <= 3)
 	end
 
@@ -893,12 +937,12 @@ local function onWindow(window, dontStartAutoplay)
 	perfc("Performance", perf)
 
 	repeat wait() until not window.Parent
-	
+
 	gameEnded:Fire()
 
 	settings.Playing = false
 	pcall(set3d, true)
-	
+
 	for i, v in cons do
 		v:Disconnect()
 	end
@@ -912,7 +956,7 @@ if pgui:FindFirstChild("Window") then
 	spawn(function()
 		while fps == 0 do r() end
 		r()
-		
+
 		message:Fire("Unable to start the autoplay:\nScript must be ran before the game starts")
 	end)
 end
