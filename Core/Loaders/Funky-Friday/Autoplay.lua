@@ -135,7 +135,7 @@ local eventBase = {
 		local cons = self._Connections
 		for i = 1, #cons do
 			local v = cons[i]
-			if v.Connected then
+			if v and v.Connected then
 				v:Fire(...)
 			else
 				remove(cons, i)
@@ -152,6 +152,8 @@ end
 
 local settingChanged = newEvent()
 settingChanged:Connect(function(setting, value)
+	print(setting, value)
+	
 	if setting == "AutoPlay" then
 		ap = value
 	elseif setting == "MaxKPSPerKey" then
