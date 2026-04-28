@@ -152,8 +152,6 @@ end
 
 local settingChanged = newEvent()
 settingChanged:Connect(function(setting, value)
-	print(setting, value)
-	
 	if setting == "AutoPlay" then
 		ap = value
 	elseif setting == "MaxKPSPerKey" then
@@ -383,8 +381,9 @@ local power = 0.89
 local hit = { }
 local receptors = { }
 
+local useX = false
 local function UDimToVector2(ud)
-	return v2(--[[ud.X.Scale]]0, ud.Y.Scale, 0)
+	return v2(useX and ud.X.Scale or 0, ud.Y.Scale, 0)
 end
 
 local function getDistance(a, b)
@@ -392,7 +391,7 @@ local function getDistance(a, b)
 end
 
 local kbVals = { }
-local kbs = { "Left", "Up", "Down", "Right" }
+local kbs = { }
 local lastKbs = concat(kbs, ",")
 
 events.Keybinds = kbs
@@ -647,7 +646,7 @@ local speed = 4 -- = 1
 local speedBuffer = { }
 
 local function canHit(note, receptor)
-	local x = UDimToVector2(receptor.Position) + v2(0.5, 0.5, 0)
+	local x = UDimToVector2(receptor.Position) + v2(useX and 0.5 or 0, 0.5, 0)
 	local y = UDimToVector2(note.Position)
 
 	local dist = getDistance(x, y) / speed
@@ -747,9 +746,9 @@ local function calculateNotes(notes)
 		end
 	end
 
-	if not start then return r() end -- no notes
-
 	local delta = r()
+	if not start then return end -- no notes
+	
 	local travel = UDimToVector2(start[4].Position) - start[3]
 	if travel.Magnitude > 0.01 and not notified then
 		notified = true
@@ -891,12 +890,17 @@ local function set3d(enabled)
 	rs:Set3dRenderingEnabled(enabled)
 end
 
-local black = Instance.new("Frame")
+local gui = Instance.new("ScreenGui", pgui)
+gui.Name = "Black"
+gui.DisplayOrder = -999
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Enabled = false
+
+local black = Instance.new("Frame", gui)
 black.BackgroundColor3 = c3()
 black.Size = UDim2.fromScale(2, 2)
 black.Position = UDim2.fromScale(0.5, 0.5)
 black.AnchorPoint = Vector2.new(0.5, 0.5)
-black.Visible = false
 black.ZIndex = -999
 
 local function onWindow(window, dontStartAutoplay)
@@ -935,16 +939,13 @@ local function onWindow(window, dontStartAutoplay)
 	local enemySide = fields[side == "Left" and "Right" or "Left"]
 	local accuracy = hud:WaitForChild("AccuracyGauge", 9e9):WaitForChild("Ticks", 9e9)
 
-	local black = black:Clone()
-	black.Parent = window
-
 	local function perfc(setting, value)
 		if setting ~= "Performance" then return end
 
 		mySide.Visible = value <= 5
 		enemySide.Visible = value <= 2
 		accuracy.Visible = value <= 1
-		black.Visible = value >= 3
+		gui.Enabled = value >= 3
 
 		pcall(set3d, value <= 3)
 	end
@@ -957,6 +958,7 @@ local function onWindow(window, dontStartAutoplay)
 	gameEnded:Fire()
 
 	settings.Playing = false
+	gui.Enabled = false
 	pcall(set3d, true)
 
 	for i, v in cons do
