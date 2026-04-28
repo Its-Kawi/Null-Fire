@@ -904,13 +904,7 @@ local function onWindow(window, dontStartAutoplay)
 	end
 end
 
-smt(settings, {
-	__index = function(self, key)
-		return key == "Events" and events or events[key]
-	end,
-	__metatable = getmetatable(game)
-})
-
+smt(settings, { __index = function(self, key) return key == "Events" and events or events[key] end })
 global[key] = settings
 
 if pgui:FindFirstChild("Window") then
