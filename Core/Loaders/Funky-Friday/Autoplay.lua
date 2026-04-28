@@ -6,7 +6,7 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.0", -- autoplayer version
+	Version = "1.01", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
@@ -28,6 +28,7 @@ local settings = {
 	NotesRendered = 0, -- read only
 	KPS = 0, -- read only
 	NotesVisible = 0, -- read only
+	ScrollSpeed = 1, -- read only
 
 	Chances = {
 		Sick = 100,
@@ -65,6 +66,7 @@ local psick = false
 local ap = false
 local maxkpspk, maxkps = 0, 0
 local hd, hdr = 0, 0
+local scrollSpeed = 1
 local cn = false
 local perf = 0
 local chances = settings.Chances
@@ -433,7 +435,7 @@ local function noteAdded(v, notest, mine)
 	insert(notest, v)
 
 	renderedOnLanes[notest] = (renderedOnLanes[notest] or 0) + 1
-	local visible = perf <= 4 or actuallyVisible < lanes * 5 and (renderedOnLanes[notest] < 7 or total % 7 == 0)
+	local visible = perf <= 4 or actuallyVisible < lanes * (5 / (scrollSpeed * 1.25)) and (renderedOnLanes[notest] < (7 / (scrollSpeed * 1.25)) or total % (7 / (scrollSpeed * 1.25)) == 0)
 	local val = visible and 1 or 0
 
 	total += 1
@@ -664,7 +666,7 @@ local lastOffset = 0
 
 spawn(function()
 	while true do
-		lastOffset = (wait(0.1) - 0.1) * 2
+		lastOffset = (wait(0.1) - 0.1) / 2
 	end
 end)
 
@@ -729,6 +731,9 @@ local function hitLane(lane, laneIndex, receptor)
 end
 
 local notified = false
+local ssMul = 1 / 6 * 100
+local minSpeed = 0.25 / 6
+
 local function calculateNotes(notes)
 	local start
 	for laneIndex, lane in notes do
@@ -755,8 +760,8 @@ local function calculateNotes(notes)
 		message:Fire("Autoplayer might have issues with ModCharts!")
 	end
 
-	local gotSpeed = getDistance(start[1], UDimToVector2(start[2].Position) - travel) / delta
-	if gotSpeed < 17 and gotSpeed > 3 then
+	local gotSpeed = clamp(getDistance(start[1], UDimToVector2(start[2].Position) - travel) / delta, 0.4, 24)
+	if gotSpeed < 25 and gotSpeed > 0.0375 then
 		while #speedBuffer >= fps do
 			remove(speedBuffer, 1)
 		end
@@ -769,6 +774,9 @@ local function calculateNotes(notes)
 		end
 
 		speed = avgSpeed / #speedBuffer
+		scrollSpeed = round(speed * ssMul) / 100
+		
+		settings.ScrollSpeed = scrollSpeed
 	end
 
 	for laneIndex, lane in notes do
@@ -849,12 +857,12 @@ local function statsAdded(stats, cons)
 		local label = row.Label
 		label.Text = name .. ": null"
 
-		local fn = function(_, value)
+		local fn = function(_, value, prefix)
 			row.Visible = true
 			if typeof(value) == "string" then
 				label.Text = value
 			elseif tonumber(value) then
-				label.Text = name .. ": " .. value
+				label.Text = name .. ": " .. (prefix or "") .. value
 			else
 				row.Visible = false
 			end
@@ -867,6 +875,7 @@ local function statsAdded(stats, cons)
 	addRow("Title", true)
 	addRow("Total Notes")
 	addRow("Rendered")
+	addRow("Scroll Speed")
 	addRow("Autoplay KPS")
 	addRow("FPS")
 
@@ -875,8 +884,9 @@ local function statsAdded(stats, cons)
 		if hs then
 			rows:Title(typeof(hs) == "string" and hs or false)
 			rows:Rendered("Rendered: " .. actuallyVisible .. " (" .. rendered .. ")")
-			rows:TotalNotes(total)
+			rows:TotalNotes(total, "~")
 			rows:AutoplayKPS(KPS)
+			rows:ScrollSpeed(scrollSpeed, "~")
 			rows:FPS("FPS: <font color=\"#" .. (estFps < 60 and c3(1):Lerp(c3(0, 1), estFps / 60) or estFps < 120 and c3(0, 1):Lerp(c3(1, 0, 1), (estFps - 60) / 60) or estFps < 240 and c3(1, 0, 1):Lerp(c3(0.33, 0, 1), (estFps - 120) / 120) or c3(0.6, 0.2, 1)):ToHex() .. "\">" .. ("%.1f"):format(estFps) .. "</font>")
 		else
 			for i, v in rows do
@@ -969,15 +979,21 @@ end
 smt(settings, { __index = function(self, key) return key == "Events" and events or events[key] end })
 global[key] = settings
 
-if pgui:FindFirstChild("Window") then
-	spawn(onWindow, pgui.Window, true)
-	spawn(function()
-		while fps == 0 do r() end
-		r()
-
-		message:Fire("Unable to start the autoplay:\nScript must be ran before the game starts")
-	end)
+local hasWindow = pgui:FindFirstChild("Window")
+if hasWindow then
+	spawn(onWindow, hasWindow, true)
 end
+
+spawn(function()
+	while fps == 0 do r() end
+	r()
+
+	message:Fire("Autoplayer loaded!")
+	
+	if hasWindow then
+		message:Fire("Unable to start the autoplay:\nScript must be ran before the game starts")
+	end
+end)
 
 pgui.ChildAdded:Connect(onWindow)
 
