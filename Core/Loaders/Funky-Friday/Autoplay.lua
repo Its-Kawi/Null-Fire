@@ -383,7 +383,7 @@ local hit = { }
 local receptors = { }
 
 local function UDimToVector2(ud)
-	return v2(ud.X.Scale, ud.Y.Scale, 0)
+	return v2(--[[ud.X.Scale]]0, ud.Y.Scale, 0)
 end
 
 local function getDistance(a, b)
@@ -878,14 +878,17 @@ local function onWindow(window, dontStartAutoplay)
 	local enemySide = fields[side == "Left" and "Right" or "Left"]:WaitForChild("Inner", 9e9)
 	local accuracy = hud:WaitForChild("AccuracyGauge", 9e9):WaitForChild("Ticks", 9e9)
 
-	cons[#cons + 1] = settingChanged:Connect(function(setting, value)
+	local function perfc(setting, value)
 		if setting ~= "Performance" then return end
-		
-		mySide.Visible = value < 5
-		enemySide.Visible = value < 2
-		accuracy.Visible = value < 1
-		pcall(set3d, value < 4)
-	end)
+
+		mySide.Visible = value <= 5
+		enemySide.Visible = value <= 2
+		accuracy.Visible = value <= 1
+		pcall(set3d, value <= 3)
+	end
+
+	cons[#cons + 1] = settingChanged:Connect(perfc)
+	perfc("Performance", perf)
 
 	repeat wait() until not window.Parent
 	
@@ -902,7 +905,8 @@ end
 smt(settings, {
 	__index = function(self, key)
 		return key == "Events" and events or events[key]
-	end
+	end,
+	__metatable = getmetatable(game)
 })
 
 global[key] = settings
