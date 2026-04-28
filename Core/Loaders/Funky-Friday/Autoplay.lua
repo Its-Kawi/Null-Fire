@@ -876,8 +876,8 @@ local function onWindow(window, dontStartAutoplay)
 		end
 	end)
 	
-	local mySide = fields[side]:WaitForChild("Inner", 9e9)
-	local enemySide = fields[side == "Left" and "Right" or "Left"]:WaitForChild("Inner", 9e9)
+	local mySide = fields[side]
+	local enemySide = fields[side == "Left" and "Right" or "Left"]
 	local accuracy = hud:WaitForChild("AccuracyGauge", 9e9):WaitForChild("Ticks", 9e9)
 
 	local function perfc(setting, value)
