@@ -6,8 +6,8 @@ if global[key] then
 end
 
 local settings = {
-	AutoPlay = true,
-	PerfectSick = 1, -- 0 to 1, 0 = off, values above 1 can cause issues
+	AutoPlay = false,
+	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
 	CopyEnemyNotes = false, -- I find this stupid
 
 	Performance = 0, -- 0 - 5
@@ -15,8 +15,8 @@ local settings = {
 	MaxKPSPerKey = 0, -- 0 or less = inf
 	MaxKPS = 0, -- same here; MaxKPS limits keys per second for ALL keys, while MaxKPSPerKey limits keys per second for each key
 
-	HoldDuration = 0.075,
-	HoldDurationRandom = 0.025, -- both positive and negative
+	HoldDuration = 0,
+	HoldDurationRandom = 0, -- both positive and negative
 
 	MoreStats = false, -- if true, stats will have autoplayer stats also, if string, it will act as its "true", but will contain that one string on top of the stats
 
