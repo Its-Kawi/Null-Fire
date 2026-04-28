@@ -27,6 +27,7 @@ local settings = {
 	FPS = 0, -- read only
 	NotesRendered = 0, -- read only
 	KPS = 0, -- read only
+	NotesVisible = 0, -- read only
 
 	Chances = {
 		Sick = 100,
@@ -57,7 +58,7 @@ SettingChanged = Event(string, any) -- settings from the settings table below
 print(settings.Keybinds[1]) -- will print the first keybind
 ]]
 
-local readonlyStats = { "Side", "Playing", "FPS", "NotesRendered", "KPS" }
+local readonlyStats = { "Side", "Playing", "FPS", "NotesRendered", "KPS", "NotesVisible" }
 
 local fps, estFps, lastDelta = 0, 0, 0
 local psick = false
@@ -75,7 +76,7 @@ local game, workspace = game, workspace
 local wait, spawn = task.wait, task.spawn
 local max, min, clamp, abs, random, round = math.max, math.min, math.clamp, math.abs, math.random, math.round
 local inf = 1 / 0
-local insert, remove, find, pack, unpack, clone, sort, concat = table.insert, table.remove, table.find, table.pack, unpack or table.unpack, table.clone, table.sort, table.concat
+local insert, remove, find, pack, unpack, clone, sort, concat = table.insert, table.remove, table.find, table.pack, unpack or table.unpack, --[[table.clone]] function(t) local copy = { } for i, v in t do copy[i] = v end return copy end, table.sort, table.concat
 local v2, c3 = vector and vector.create or Vector2.new, Color3.new
 local ipairs = ipairs
 local tonumber, tostring = tonumber, tostring
@@ -423,24 +424,35 @@ local labelAdded; labelAdded = function(laneNum, label, cons)
 end
 
 local rolled = { }
+local actuallyVisible = 0
+
 local function noteAdded(v, notest, mine)
 	note:Fire(v, mine)
 
 	insert(notest, v)
 
+	renderedOnLanes[notest] = (renderedOnLanes[notest] or 0) + 1
+	local visible = perf <= 4 or actuallyVisible < lanes * 5 and (renderedOnLanes[notest] < 7 or total % 7 == 0)
+	local val = visible and 1 or 0
+
 	total += 1
 
-	renderedOnLanes[notest] = (renderedOnLanes[notest] or 0) + 1
 	settings.NotesRendered += 1
 	rendered += 1
+	actuallyVisible += val
+	settings.NotesVisible += val
 
-	v.Visible = perf <= 4 or renderedOnLanes[notest] < 7 or total % 7 == 0 -- because of multiplie lanes it will show really low amount of notes
+	v.Visible = visible -- because of multiplie lanes it will show really low amount of notes
+
 	v:GetPropertyChangedSignal("Parent"):Wait()
+
 	noteRemoved:Fire(v, mine)
 
 	renderedOnLanes[notest] -= 1
 	settings.NotesRendered -= 1
-	rendered -= 1
+	rendered -= 1	
+	actuallyVisible -= val
+	settings.NotesVisible += val
 
 	rolled[v] = nil
 	hit[v] = false
@@ -546,11 +558,11 @@ local function laneAdded(lane, isMine, notest, cons)
 end
 
 local offsets = {
-	Sick = 0.035,
-	Good = 0.09,
-	Ok = 0.14,
-	Bad = 0.19,
-	Miss = 0.4
+	Sick = 0.05,
+	Good = 0.1,
+	Ok = 0.15,
+	Bad = 0.2,
+	Miss = 0.3
 }
 
 local downKeys, keys = { }, { }
@@ -656,9 +668,11 @@ spawn(function()
 end)
 
 local function hitNote(note, key, dist, sick)
-	local t = dist * psick
-	if t > 0 then
-		wait(t - lastOffset)
+	if sick and psick > 0 then
+		local t = dist * psick - lastOffset
+		if t > 0 then
+			wait(t)
+		end
 	end
 
 	if hit[note] then return end
@@ -730,7 +744,7 @@ local function calculateNotes(notes)
 			break
 		end
 	end
-	
+
 	if not start then return r() end -- no notes
 
 	local delta = r()
@@ -739,23 +753,23 @@ local function calculateNotes(notes)
 		notified = true
 		message:Fire("Autoplayer might have issues with ModCharts!")
 	end
-	
+
 	local gotSpeed = getDistance(start[1], UDimToVector2(start[2].Position) - travel) / delta
 	if gotSpeed < 17 and gotSpeed > 3 then
 		while #speedBuffer >= fps do
 			remove(speedBuffer, 1)
 		end
-		
+
 		insert(speedBuffer, gotSpeed)
-		
+
 		local avgSpeed = 0
 		for i, v in speedBuffer do
 			avgSpeed += v
 		end
-		
+
 		speed = avgSpeed / #speedBuffer
 	end
-	
+
 	for laneIndex, lane in notes do
 		spawn(hitLane, lane, laneIndex, receptors[laneIndex])
 	end
@@ -859,7 +873,7 @@ local function statsAdded(stats, cons)
 		local hs = settings.MoreStats
 		if hs then
 			rows:Title(typeof(hs) == "string" and hs or false)
-			rows:Rendered(rendered)
+			rows:Rendered("Rendered: " .. actuallyVisible .. " (" .. rendered .. ")")
 			rows:TotalNotes(total)
 			rows:AutoplayKPS(KPS)
 			rows:FPS("FPS: <font color=\"#" .. (estFps < 60 and c3(1):Lerp(c3(0, 1), estFps / 60) or estFps < 120 and c3(0, 1):Lerp(c3(1, 0, 1), (estFps - 60) / 60) or estFps < 240 and c3(1, 0, 1):Lerp(c3(0.33, 0, 1), (estFps - 120) / 120) or c3(0.6, 0.2, 1)):ToHex() .. "\">" .. ("%.1f"):format(estFps) .. "</font>")
