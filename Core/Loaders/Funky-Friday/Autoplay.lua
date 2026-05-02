@@ -17,8 +17,8 @@ local settings = {
 	MaxKPSPerKey = 0, -- 0 or less = inf
 	MaxKPS = 0, -- same here; MaxKPS limits keys per second for ALL keys, while MaxKPSPerKey limits keys per second for each key
 
-	HoldDuration = 0,
-	HoldDurationRandom = 0, -- both positive and negative
+	HoldDuration = 0.075, -- in seconds
+	HoldDurationRandom = 0.025, -- random goes in both - positive and negative
 
 	MoreStats = false, -- if true, stats will have autoplayer stats also, if string, it will act as its "true", but will contain that one string on top of the stats
 
@@ -715,14 +715,15 @@ local canHit; canHit = function(note, receptor, isBadNote, laneIndex)
 
 	local dist = getDistance(x, y) / speed
 	if isBadNote then
-		return dist <= (offsets.Bad * (isBehind(x, y) * 2 or 1))
+		return dist, isBehind(x, y)
 	else
 		local bad = badNotes[laneIndex]
 		local forceSick = false -- unused
 		
 		if bad then
 			for i, v in bad do
-				if canHit(v, note, true, laneIndex) then
+				local d, b = canHit(v, note, true, laneIndex)
+				if b and d < (offsets.Bad * 2) or not b and d < dist then
 					return false, false, dist, false, false
 				end
 			end
