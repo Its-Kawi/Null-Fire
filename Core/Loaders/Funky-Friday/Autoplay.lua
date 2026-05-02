@@ -2,27 +2,17 @@ local global = getgenv and getgenv() or _G
 local key = "FFAutoplayLib"
 
 if global[key] then
-	local g = global[key]
-
-	task.spawn(function()
-		local ev = g.Events.Message
-		local wait = task.wait
-
-		repeat wait() until #ev.Connections ~= 0
-		ev:Fire("Autoplay already running!")
-	end)
-
-	return g
+	return global[key]
 end
 
 local settings = {
 	Version = "1.1", -- autoplayer version
 
-	AutoPlay = true,
-	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
+	AutoPlay = false,
+	PerfectSick = 1, -- 0 to 1, 0 = off, values above 1 can cause issues
 	CopyEnemyNotes = false, -- I find this stupid
 
-	Performance = 5, -- 0 - 5. More value = less lags
+	Performance = 0, -- 0 - 5. More value = less lags
 
 	MaxKPSPerKey = 0, -- 0 or less = inf
 	MaxKPS = 0, -- same here; MaxKPS limits keys per second for ALL keys, while MaxKPSPerKey limits keys per second for each key
@@ -30,7 +20,7 @@ local settings = {
 	HoldDuration = 0,
 	HoldDurationRandom = 0, -- both positive and negative
 
-	MoreStats = "Hi", -- if true, stats will have autoplayer stats also, if string, it will act as its "true", but will contain that one string on top of the stats
+	MoreStats = false, -- if true, stats will have autoplayer stats also, if string, it will act as its "true", but will contain that one string on top of the stats
 
 	Side = "Left", -- read only
 	Playing = false, -- read only
