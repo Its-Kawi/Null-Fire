@@ -1,14 +1,28 @@
 local global = getgenv and getgenv() or _G
 local key = "FFAutoplayLib"
 
-local settings = {
-	Version = "1.01", -- autoplayer version
+if global[key] then
+	local g = global[key]
 
-	AutoPlay = false,
+	task.spawn(function()
+		local ev = g.Events.Message
+		local wait = task.wait
+
+		repeat wait() until #ev.Connections ~= 0
+		ev:Fire("Autoplay already running!")
+	end)
+
+	return g
+end
+
+local settings = {
+	Version = "1.1", -- autoplayer version
+
+	AutoPlay = true,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
 	CopyEnemyNotes = false, -- I find this stupid
 
-	Performance = 0, -- 0 - 5
+	Performance = 5, -- 0 - 5. More value = less lags
 
 	MaxKPSPerKey = 0, -- 0 or less = inf
 	MaxKPS = 0, -- same here; MaxKPS limits keys per second for ALL keys, while MaxKPSPerKey limits keys per second for each key
@@ -16,7 +30,7 @@ local settings = {
 	HoldDuration = 0,
 	HoldDurationRandom = 0, -- both positive and negative
 
-	MoreStats = false, -- if true, stats will have autoplayer stats also, if string, it will act as its "true", but will contain that one string on top of the stats
+	MoreStats = "Hi", -- if true, stats will have autoplayer stats also, if string, it will act as its "true", but will contain that one string on top of the stats
 
 	Side = "Left", -- read only
 	Playing = false, -- read only
@@ -96,9 +110,8 @@ local connectionBase = {
 		end
 
 		if not self.Enabled then return end
-
 		spawn(self.Callback, ...)
-	end,
+	end
 }
 
 connectionBase = { __index = connectionBase }
@@ -161,9 +174,9 @@ settingChanged:Connect(function(setting, value)
 	elseif setting == "CopyEnemyNotes" then
 		cn = value
 	elseif setting == "HoldDuration" then
-		hd = value
+		hd = abs(value)
 	elseif setting == "HoldDurationRandom" then
-		hdr = value
+		hdr = abs(value)
 	elseif setting == "Performance" then
 		perf = value
 	end
@@ -275,6 +288,7 @@ local uis = game:GetService("UserInputService")
 local kk = Enum.KeyCode
 local vim = game:GetService("VirtualInputManager")
 local rse = rs.RenderStepped
+local isMobile = uis.TouchEnabled and not uis.KeyboardEnabled
 
 local function r(times)
 	local dt = tick()
@@ -286,6 +300,27 @@ local function r(times)
 	return tick() - dt
 end
 
+local function getAverage(t)
+	local avg = 0
+	local l = #t
+
+	for i = 1, l do
+		avg += t[i]
+	end
+
+	return avg / l
+end
+
+local function append(t, v, s)
+	s = max(round(s), 1)
+	while #t >= s do
+		remove(t, 1)
+	end
+
+	insert(t, v)
+	return getAverage(t)
+end
+
 local fpsBuffer = { }
 spawn(function()
 	while true do
@@ -293,19 +328,8 @@ spawn(function()
 		fps = 1 / lastDelta
 		psick = fps > 20 and settings.PerfectSick or 0
 
-		local ffps = max(round(fps), 1)
-		while #fpsBuffer >= ffps do
-			remove(fpsBuffer, 1)
-		end
-
-		insert(fpsBuffer, fps)
-
-		estFps = 0
-		for i, v in fpsBuffer do
-			estFps += v
-		end
-
-		estFps = clamp(round((estFps / #fpsBuffer) * 10) / 10, 0, 2e9)
+		append(fpsBuffer, fps, fps)
+		estFps = clamp(round(append(fpsBuffer, fps, fps) * 10) / 10, 0, 2e9)
 
 		settings.FPS = estFps
 		local ros = { }
@@ -365,17 +389,10 @@ local function getMySide()
 end
 
 local side = getMySide() or "Left"
-spawn(function()
-	while wait(0.1) do
-		side = getMySide() or side
-		settings.Side = side
-	end
-end)
-
 local lanes = 0
 local isDownscroll = false
 local downscrollPropability = 0
-local power = 0.89
+local power = 3 -- idc
 
 local hit = { }
 local receptors = { }
@@ -409,6 +426,33 @@ local function refreshKbs(t)
 	end
 end
 
+local function raceEvents(events, timeout)
+	timeout = timeout or 1
+
+	local last = tick()
+	local cons = { }
+	local winner
+
+	for i, v in events do
+		cons[#cons + 1] = v:Once(function()
+			winner = i
+
+			for idx, val in cons do
+				val:Disconnect()
+			end
+		end)
+	end
+
+	repeat wait() until winner or tick() - last > timeout
+
+	winner = winner or 0
+	for idx, val in cons do
+		val:Disconnect()
+	end
+
+	return winner
+end
+
 local labelAdded; labelAdded = function(laneNum, label, cons)
 	local textL = label:WaitForChild("Text", 9e9)
 	kbVals[laneNum] = kbVals[laneNum] or { }
@@ -424,17 +468,43 @@ local labelAdded; labelAdded = function(laneNum, label, cons)
 end
 
 local rolled = { }
+local badNotes = { }
+local badNoteAssets = { "rbxassetid://116778203667435", "rbxassetid://116254476280414", "rbxassetid://91620137594170", "rbxassetid://84581380793886", "rbxassetid://74989444694115" }
 local actuallyVisible = 0
 
-local function noteAdded(v, notest, mine)
-	note:Fire(v, mine)
+local gpcsCache = { }
+local function gpcs(v, n)
+	local cache = gpcsCache[tonumber(v.Name) or v.Name] or { }
+	gpcsCache[v] = cache
 
-	insert(notest, v)
+	local got = cache[n] or v:GetPropertyChangedSignal(n)
+	cache[n] = got
 
-	renderedOnLanes[notest] = (renderedOnLanes[notest] or 0) + 1
-	local visible = perf <= 4 or actuallyVisible < lanes * (5 / (scrollSpeed * 1.25)) and (renderedOnLanes[notest] < (7 / (scrollSpeed * 1.25)) or total % (7 / (scrollSpeed * 1.25)) == 0)
+	return got
+end
+
+local dummy = { }
+local function noteAdded(v, notest, mine, lane)
+	note:Fire(v, mine, lane)
+
+	local isGood = not find(badNoteAssets, v:WaitForChild("LayeredSprite", 9e9):WaitForChild("2", 9e9).Image)
+	local toInsert
+	if isGood then
+		toInsert = notest
+	elseif mine then
+		toInsert = badNotes[lane] or { }
+		badNotes[lane] = toInsert
+	else
+		toInsert = dummy
+	end
+
+	insert(toInsert, v)
+
+	renderedOnLanes[lane] = renderedOnLanes[lane] or 0
+	local visible = perf >= 4 and mine and renderedOnLanes[lane] <= 64 // scrollSpeed and (renderedOnLanes[lane] <= 16 // scrollSpeed or renderedOnLanes[lane] % (8 * scrollSpeed // 1) == 0) or perf < 4
 	local val = visible and 1 or 0
 
+	renderedOnLanes[lane] += val
 	total += 1
 
 	settings.NotesRendered += 1
@@ -444,23 +514,30 @@ local function noteAdded(v, notest, mine)
 
 	v.Visible = visible -- because of multiplie lanes it will show really low amount of notes
 
-	v:GetPropertyChangedSignal("Parent"):Wait()
+	gpcs(v, "Parent"):Wait()
 
-	noteRemoved:Fire(v, mine)
+	noteRemoved:Fire(v, mine, lane)
 
-	renderedOnLanes[notest] -= 1
+	renderedOnLanes[lane] -= val
 	settings.NotesRendered -= 1
 	rendered -= 1	
 	actuallyVisible -= val
 	settings.NotesVisible += val
 
 	rolled[v] = nil
-	hit[v] = false
-
-	local found = find(notest, v)
+	local found = find(toInsert, v)
 	if found then
-		remove(notest, found)
+		remove(toInsert, found)
 	end
+end
+
+local function sortF(a, b)
+	local cond = a.Position.Y.Scale > b.Position.Y.Scale
+	if isDownscroll then
+		cond = not cond
+	end
+
+	return cond
 end
 
 local function laneAdded(lane, isMine, notest, cons)
@@ -518,17 +595,9 @@ local function laneAdded(lane, isMine, notest, cons)
 			insert(unsorted, v)
 		end
 
-		sort(unsorted, function(a, b)
-			local bool = a.Position.Y.Scale > b.Position.Y.Scale
-			if isDownscroll then
-				bool = not bool
-			end
-
-			return bool
-		end)
-
+		sort(unsorted, sortF)
 		for i = 1, #unsorted do
-			spawn(noteAdded, unsorted[i], notest, not not isMine)
+			spawn(noteAdded, unsorted[i], notest, not not isMine, laneNum)
 		end
 	end
 
@@ -542,7 +611,7 @@ local function laneAdded(lane, isMine, notest, cons)
 			remove(notest, found)
 		end
 
-		noteAdded(v, notest, not not isMine)
+		noteAdded(v, notest, not not isMine, laneNum)
 	end)
 
 	local labels = lane:WaitForChild("Labels", 9e9)
@@ -567,7 +636,7 @@ local offsets = {
 
 for i, v in offsets do
 	if i ~= "Miss" then
-		offsets[i] = v - 0.01
+		offsets[i] = v - 0.005
 	end
 end
 
@@ -648,20 +717,34 @@ local function roll(note)
 end
 
 local speed = 4 -- = 1
-local speedBuffer = { }
+local speedBuffer = { speed }
 
-local function canHit(note, receptor)
+local canHit; canHit = function(note, receptor, isBadNote, laneIndex)
 	local x = UDimToVector2(receptor.Position) + v2(useX and 0.5 or 0, 0.5, 0)
 	local y = UDimToVector2(note.Position)
 
 	local dist = getDistance(x, y) / speed
+	if isBadNote then
+		return dist <= (offsets.Bad * (isBehind(x, y) * 2 or 1))
+	else
+		local bad = badNotes[laneIndex]
+		local forceSick = false -- unused
+		
+		if bad then
+			for i, v in bad do
+				if canHit(v, note, true, laneIndex) then
+					return false, false, dist, false, false
+				end
+			end
+		end
 
-	if isBehind(x, y) then
-		return dist <= offsets.Bad, true, dist, false
+		if isBehind(x, y) then
+			return dist <= offsets.Bad, true, dist, false, false
+		end
+
+		local rolled = forceSick and "Sick" or roll(note)
+		return dist <= offsets[rolled], false, dist, rolled == "Sick", forceSick
 	end
-
-	local rolled = roll(note)
-	return dist <= offsets[rolled], false, dist, rolled == "Sick"
 end
 
 local one = UDim2.fromScale(1, 1)
@@ -669,13 +752,20 @@ local lastOffset = 0
 
 spawn(function()
 	while true do
-		lastOffset = (wait(0.1) - 0.1) / 2
+		lastOffset = (wait(0.1) - 0.1) / 1.5
+		side = getMySide() or side
+		settings.Side = side
 	end
 end)
 
-local function hitNote(note, key, dist, sick)
-	if sick and psick > 0 then
-		local t = dist * psick - lastOffset
+local function sortLane(lane)
+	sort(lane, sortF)
+end
+
+local function hitNote(note, key, dist, sick, lane, force)
+	local s = force or psick
+	if sick and s > 0 then
+		local t = dist * s - lastOffset
 		if t > 0 then
 			wait(t)
 		end
@@ -686,7 +776,7 @@ local function hitNote(note, key, dist, sick)
 
 	local time = hd
 	if hdr > 0 then
-		time += (random() - 0.5) * 2 * hdr
+		time += (random() - 0.5) * 2 * abs
 	end
 
 	for _, v in note:GetChildren() do
@@ -697,6 +787,14 @@ local function hitNote(note, key, dist, sick)
 	end
 
 	spawn(pressKey, key, time > 0 and time)
+
+	local winner = raceEvents({ gpcs(note, "Parent"), gpcs(note, "Position") }, 0)
+	hit[note] = false
+
+	if winner ~= 0 and note.Parent and not find(lane, note) then
+		insert(lane, 1, note)
+		spawn(sortLane, lane)
+	end
 end
 
 local function hitLane(lane, laneIndex, receptor)
@@ -713,10 +811,10 @@ local function hitLane(lane, laneIndex, receptor)
 		local note = lane[1]
 		if note == meetYouAgain then break end
 
-		local can, far, dist, sick = canHit(note, receptor)
+		local can, far, dist, sick, force = canHit(note, receptor, false, laneIndex)
 		if can then
 			remove(lane, 1)
-			spawn(hitNote, note, key, dist, sick)
+			spawn(hitNote, note, key, dist, sick, lane, force)
 		elseif not far then
 			if meetYouAgain then
 				local pos = find(lane, meetYouAgain)
@@ -733,9 +831,18 @@ local function hitLane(lane, laneIndex, receptor)
 	end
 end
 
+local function notif(text)
+	while #message._Connections == 0 do wait() end
+	message:Fire(text)
+end
+
+local function msg(text)
+	spawn(notif, text)
+end
+
 local notified = false
-local ssMul = 1 / 6 * 100
-local minSpeed = 0.25 / 6
+local ssMul = 1 / 5 * 100
+local minSpeed = 0.25 / 7
 
 local function calculateNotes(notes)
 	local start
@@ -756,30 +863,20 @@ local function calculateNotes(notes)
 
 	local delta = r()
 	if not start then return end -- no notes
-	
+
 	local travel = UDimToVector2(start[4].Position) - start[3]
 	if travel.Magnitude > 0.01 and not notified then
 		notified = true
-		message:Fire("Autoplayer might have issues with ModCharts!")
+		msg("Autoplayer might have issues with ModCharts!")
 	end
 
-	local gotSpeed = clamp(getDistance(start[1], UDimToVector2(start[2].Position) - travel) / delta, 0.4, 24)
-	if gotSpeed < 25 and gotSpeed > 0.0375 then
-		while #speedBuffer >= fps do
-			remove(speedBuffer, 1)
-		end
-
-		insert(speedBuffer, gotSpeed)
-
-		local avgSpeed = 0
-		for i, v in speedBuffer do
-			avgSpeed += v
-		end
-
-		speed = avgSpeed / #speedBuffer
+	local gotSpeed = clamp(getDistance(start[1], UDimToVector2(start[2].Position) - travel) / delta, minSpeed, 32)
+	if gotSpeed < 32 and gotSpeed > minSpeed - 0.01 then
+		local avg = getAverage(speedBuffer)
+		speed = append(speedBuffer, gotSpeed * 2 - avg, fps)
 		scrollSpeed = round(speed * ssMul) / 100
-		
-		settings.ScrollSpeed = scrollSpeed
+
+		settings.ScrollSpeed = speed
 	end
 
 	for laneIndex, lane in notes do
@@ -878,7 +975,6 @@ local function statsAdded(stats, cons)
 	addRow("Title", true)
 	addRow("Total Notes")
 	addRow("Rendered")
-	addRow("Scroll Speed")
 	addRow("Autoplay KPS")
 	addRow("FPS")
 
@@ -889,7 +985,6 @@ local function statsAdded(stats, cons)
 			rows:Rendered("Rendered: " .. actuallyVisible .. " (" .. rendered .. ")")
 			rows:TotalNotes(total, "~")
 			rows:AutoplayKPS(KPS)
-			rows:ScrollSpeed(scrollSpeed, "~")
 			rows:FPS("FPS: <font color=\"#" .. (estFps < 60 and c3(1):Lerp(c3(0, 1), estFps / 60) or estFps < 120 and c3(0, 1):Lerp(c3(1, 0, 1), (estFps - 60) / 60) or estFps < 240 and c3(1, 0, 1):Lerp(c3(0.33, 0, 1), (estFps - 120) / 120) or c3(0.6, 0.2, 1)):ToHex() .. "\">" .. ("%.1f"):format(estFps) .. "</font>")
 		else
 			for i, v in rows do
@@ -907,7 +1002,7 @@ local gui = Instance.new("ScreenGui", pgui)
 gui.Name = "Black"
 gui.DisplayOrder = -999
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Enabled = false
+gui.ResetOnSpawn = false
 
 local black = Instance.new("Frame", gui)
 black.BackgroundColor3 = c3()
@@ -915,6 +1010,7 @@ black.Size = UDim2.fromScale(2, 2)
 black.Position = UDim2.fromScale(0.5, 0.5)
 black.AnchorPoint = Vector2.new(0.5, 0.5)
 black.ZIndex = -999
+black.BackgroundTransparency = 0.98
 
 local function onWindow(window, dontStartAutoplay)
 	if window.Name ~= "Window" then return end
@@ -924,6 +1020,7 @@ local function onWindow(window, dontStartAutoplay)
 	lanes = 0
 	total = 0
 	kbVals = { }
+	badNotes = { }
 
 	settings.Playing = true
 
@@ -958,7 +1055,7 @@ local function onWindow(window, dontStartAutoplay)
 		mySide.Visible = value <= 5
 		enemySide.Visible = value <= 2
 		accuracy.Visible = value <= 1
-		gui.Enabled = value >= 3
+		black.BackgroundTransparency = value >= 3 and 0 or 1
 
 		pcall(set3d, value <= 3)
 	end
@@ -971,7 +1068,7 @@ local function onWindow(window, dontStartAutoplay)
 	gameEnded:Fire()
 
 	settings.Playing = false
-	gui.Enabled = false
+	black.BackgroundTransparency = 1
 	pcall(set3d, true)
 
 	for i, v in cons do
@@ -991,24 +1088,67 @@ spawn(function()
 	while fps == 0 do r() end
 	r()
 
-	message:Fire("Autoplayer loaded!")
-	
+	msg("Autoplayer loaded!")
+
 	if hasWindow then
-		message:Fire("Unable to start the autoplay:\nScript must be ran before the game starts")
+		msg("Unable to start the autoplay:\nScript must be ran before the game starts")
 	end
-	
+
 	local key = kk.RightAlt
-	uis.InputBegan:Connect(function(kk)
-		if kk == key then
+	local pressed = false
+
+	local con = isMobile and uis.InputBegan:Connect(function(kk)
+		if kk.KeyCode == key then
+			pressed = true
+		end
+	end) or uis.InputBegan:Connect(function(kk)
+		if kk.UserInputType == Enum.UserInputType.Touch then
 			pressed = true
 		end
 	end)
-	
-	press(key, true)
-	press(key, false)
-    r(10)
 
-    warn("Press check:", pressed)
+	local function pressCheck()
+		if pressed then return true end
+
+		pcall(press, key, true)
+		pcall(press, key, false)
+		r(2)
+
+		if pressed then
+			con:Disconnect()
+		end
+
+		return pressed
+	end
+
+	local function WARN()
+		msg("Autoplayer might don't work, because executor for some reason doesn't support key pressing, or rejects them")
+	end
+
+	local kp, kr = keypress, keyrelease
+	if not isMobile then
+		if not pressCheck() then
+			if kp and kr then
+				local oldPress = press
+				press = function(key, isDown)
+					(isDown and kp or kr)(key.Name)
+				end
+
+				if not pressCheck() then
+					press = function(key, isDown)
+						(isDown and kp or kr)(key)
+					end
+
+					if not pressCheck() then
+						press = oldPress
+						WARN()
+					end
+				end
+			else
+				WARN()
+			end
+		end
+	end
 end)
 
 pgui.ChildAdded:Connect(onWindow)
