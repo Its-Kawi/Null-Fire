@@ -32,6 +32,7 @@ local settings = {
 	ScrollSpeed = 0, -- read only
 	DownScroll = false, -- read only
 	Lanes = 0, -- e.g. how much keys are in the song (4, 5, 6, 7, 8, 9), read only
+	RenderDelta = 0, -- a literal tick() time between RenderStepped events
 
 	Chances = {
 		Sick = 100,
@@ -77,7 +78,7 @@ Each Connection has
 	:Disconnect() -> never
 ]]
 
-local readonlyStats = { "Side", "Playing", "FPS", "NotesRendered", "KPS", "NotesVisible", "ScrollSpeed", "DownScroll", "Lanes" }
+local readonlyStats = { "Side", "Playing", "FPS", "NotesRendered", "KPS", "NotesVisible", "ScrollSpeed", "DownScroll", "Lanes", "RenderDelta" }
 
 local fps, estFps, lastDelta = 0, 0, 0
 local psick = false
@@ -347,6 +348,7 @@ spawn(function()
 		estFps = round(append(fpsBuffer, fps, fps) * 10) / 10
 
 		settings.FPS = estFps
+		settings.RenderDelta = lastDelta
 
 		local Changed = false
 		local chancesChanged = false
