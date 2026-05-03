@@ -37,8 +37,8 @@ local settings = {
 		Sick = 100,
 		Good = 0,
 		Ok = 0,
-		Bad = 0,
-		Miss = 0
+		Bad = 0, -- wont always hit the "Bad", very often it will hit the `Ok`
+		Miss = 0 -- sometimes when `Miss` note and any other note are coming close, they both will be hit
 	}
 }
 
