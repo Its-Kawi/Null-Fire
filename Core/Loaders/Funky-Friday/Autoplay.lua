@@ -8,19 +8,19 @@ end
 local settings = {
 	Version = "1.1", -- autoplayer version
 
-	AutoPlay = false,
-	PerfectSick = 1, -- 0 to 1, 0 = off, values above 1 can cause issues
+	AutoPlay = true,
+	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
 	CopyEnemyNotes = false, -- I find this stupid
 
-	Performance = 0, -- 0 - 5. More value = less lags
+	Performance = 5, -- 0 - 5. More value = less lags
 
 	MaxKPSPerKey = 0, -- 0 or less = inf
 	MaxKPS = 0, -- same here; MaxKPS limits keys per second for ALL keys, while MaxKPSPerKey limits keys per second for each key
 
-	HoldDuration = 0.075, -- in seconds
-	HoldDurationRandom = 0.025, -- random goes in both - positive and negative
+	HoldDuration = 0,
+	HoldDurationRandom = 0, -- both positive and negative
 
-	MoreStats = false, -- if true, stats will have autoplayer stats also, if string, it will act as its "true", but will contain that one string on top of the stats
+	MoreStats = "Hi", -- if true, stats will have autoplayer stats also, if string, it will act as its "true", but will contain that one string on top of the stats
 
 	Side = "Left", -- read only
 	Playing = false, -- read only
@@ -723,7 +723,7 @@ local canHit; canHit = function(note, receptor, isBadNote, laneIndex)
 		if bad then
 			for i, v in bad do
 				local d, b = canHit(v, note, true, laneIndex)
-				if b and d < (offsets.Bad * 2) or not b and d < dist then
+				if b and d < offsets.Miss or not b and d < dist then
 					return false, false, dist, false, false
 				end
 			end
@@ -734,7 +734,7 @@ local canHit; canHit = function(note, receptor, isBadNote, laneIndex)
 		end
 
 		local rolled = forceSick and "Sick" or roll(note)
-		return dist <= offsets[rolled], false, dist, rolled == "Sick", forceSick
+		return rolled ~= "Miss" and dist <= offsets[rolled], false, dist, rolled == "Sick", forceSick
 	end
 end
 
@@ -1003,6 +1003,64 @@ black.AnchorPoint = Vector2.new(0.5, 0.5)
 black.ZIndex = -999
 black.BackgroundTransparency = 0.98
 
+local pressChecked = false
+local function pressCheck()
+	if pressChecked then return end
+	pressChecked = true
+	
+	local key = kk.RightAlt
+	local pressed = false
+
+	local con = uis.InputBegan:Connect(function(kk)
+		if kk.KeyCode == key then
+			pressed = true
+		end
+	end)
+
+	local function pressCheck()
+		if pressed then return true end
+
+		pcall(press, key, true)
+		pcall(press, key, false)
+		r(2)
+
+		if pressed then
+			con:Disconnect()
+		end
+
+		return pressed
+	end
+
+	local function WARN()
+		msg("Autoplayer might don't work, because executor for some reason doesn't support key pressing, or rejects them")
+	end
+
+	local kp, kr = keypress, keyrelease
+	if not pressCheck() then
+		if kp and kr then
+			local oldPress = press
+			press = function(key, isDown)
+				(isDown and kp or kr)(key.Name)
+			end
+
+			if not pressCheck() then
+				press = function(key, isDown)
+					(isDown and kp or kr)(key)
+				end
+
+				if not pressCheck() then
+					press = oldPress
+					WARN()
+				end
+			end
+		else
+			WARN()
+		end
+	end
+
+	con:Disconnect()
+end
+
 local function onWindow(window, dontStartAutoplay)
 	if window.Name ~= "Window" then return end
 
@@ -1023,6 +1081,10 @@ local function onWindow(window, dontStartAutoplay)
 		Right = fields:WaitForChild("Right", 9e9)
 	}
 
+	if isMobile then
+		spawn(pressCheck)
+	end
+	
 	spawn(mainLoop, fields, window, dontStartAutoplay)
 
 	local hud = gameField:WaitForChild("HUD", 9e9)
@@ -1085,60 +1147,8 @@ spawn(function()
 		msg("Unable to start the autoplay:\nScript must be ran before the game starts")
 	end
 
-	local key = kk.RightAlt
-	local pressed = false
-
-	local con = isMobile and uis.InputBegan:Connect(function(kk)
-		if kk.KeyCode == key then
-			pressed = true
-		end
-	end) or uis.InputBegan:Connect(function(kk)
-		if kk.UserInputType == Enum.UserInputType.Touch then
-			pressed = true
-		end
-	end)
-
-	local function pressCheck()
-		if pressed then return true end
-
-		pcall(press, key, true)
-		pcall(press, key, false)
-		r(2)
-
-		if pressed then
-			con:Disconnect()
-		end
-
-		return pressed
-	end
-
-	local function WARN()
-		msg("Autoplayer might don't work, because executor for some reason doesn't support key pressing, or rejects them")
-	end
-
-	local kp, kr = keypress, keyrelease
 	if not isMobile then
-		if not pressCheck() then
-			if kp and kr then
-				local oldPress = press
-				press = function(key, isDown)
-					(isDown and kp or kr)(key.Name)
-				end
-
-				if not pressCheck() then
-					press = function(key, isDown)
-						(isDown and kp or kr)(key)
-					end
-
-					if not pressCheck() then
-						press = oldPress
-						WARN()
-					end
-				end
-			else
-				WARN()
-			end
-		end
+		pressCheck()
 	end
 end)
 
