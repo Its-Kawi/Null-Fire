@@ -7,7 +7,7 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.2", -- autoplayer version
+	Version = "1.21", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 1, -- 0 to 1, 0 = off, values above 1 can cause issues
