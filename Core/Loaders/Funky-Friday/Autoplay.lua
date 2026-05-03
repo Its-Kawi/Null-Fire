@@ -25,14 +25,14 @@ local settings = {
 
 	Side = "Left", -- read only
 	Playing = false, -- read only
-	FPS = 0, -- read only
-	NotesRendered = 0, -- read only
+	FPS = 0, -- approximated fps value, read only
+	NotesRendered = 0, -- how many notes there currently is, read only
 	KPS = 0, -- read only
-	NotesVisible = 0, -- read only
-	ScrollSpeed = 0, -- read only
-	DownScroll = false, -- read only
+	NotesVisible = 0, -- how many notes are visible right now (this can be lower than rendered, because of performance option), read only
+	ScrollSpeed = 0, -- is not game's scroll speed, is calculated scroll speed; usually that value 3-6 times bigger than game's scrollspeed value, read only
+	DownScroll = false, -- on ModChart songs it sometimes can freak out, read only
 	Lanes = 0, -- e.g. how much keys are in the song (4, 5, 6, 7, 8, 9), read only
-	RenderDelta = 0, -- a literal tick() time between RenderStepped events
+	RenderDelta = 0, -- a literal (tick() - start) time between RenderStepped events, read only
 
 	Chances = {
 		Sick = 100,
