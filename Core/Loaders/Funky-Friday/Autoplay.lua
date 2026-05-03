@@ -767,7 +767,7 @@ local function hitNote(note, key, dist, sick, lane, force)
 
 	local time = hd
 	if hdr > 0 then
-		time += (random() - 0.5) * 2 * abs
+		time += (random() - 0.5) * 2 * abs(hdr)
 	end
 
 	for _, v in note:GetChildren() do
