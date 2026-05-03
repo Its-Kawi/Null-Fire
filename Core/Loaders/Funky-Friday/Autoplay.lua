@@ -384,13 +384,17 @@ spawn(function()
 	end
 end)
 
+local function getDistance(a, b)
+	return (a - b).Magnitude
+end
+
 local function getClosest(toIterate)
 	if not plr.Character then return end
 
 	local c, d = nil, inf
 
 	for _, v in toIterate:GetChildren() do
-		local m = (v:GetPivot().Position - plr.Character:GetPivot().Position).Magnitude
+		local m = getDistance(v:GetPivot().Position, plr.Character:GetPivot().Position)
 		if m < d then
 			c, d = v, m
 		end
@@ -426,10 +430,6 @@ local hit = { }
 local useX = true
 local function UDimToVector2(ud)
 	return v2(useX and ud.X.Scale or 0, ud.Y.Scale, 0)
-end
-
-local function getDistance(a, b)
-	return (a - b).Magnitude
 end
 
 local kbVals = { }
@@ -917,9 +917,8 @@ local function calculateNotes(notes, receptors)
 	
 	if not isModChart and ap then
 		for _, v in startPositions do
-			if (UDimToVector2(v[4].Position) - v[3]).Magnitude / dlt > 0.1 then
+			if getDistance(UDimToVector2(v[4].Position), v[3]) / dlt > 0.1 then
 				isModChart = true
-				warn("MODDD")
 				break
 			end
 		end
