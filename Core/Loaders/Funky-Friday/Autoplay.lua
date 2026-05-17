@@ -7,10 +7,10 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.21", -- autoplayer version
+	Version = "1.22", -- autoplayer version
 
 	AutoPlay = false,
-	PerfectSick = 1, -- 0 to 1, 0 = off, values above 1 can cause issues
+	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
 	CopyEnemyNotes = false, -- I find this stupid
 
 	Performance = 0, -- 0 - 5. More value = less lags
@@ -47,8 +47,8 @@ local settings = {
 Keybinds = { string }
 Events = { [string] = Event } -- a table that stores next events:
 
-NoteAdded = Event(instance, isMine: boolean)
-NoteRemoved = Event(instance, isMine: boolean)
+NoteAdded = Event(instance, isMine: boolean, isRegularNote: boolean)
+NoteRemoved = Event(instance, isMine: boolean, isRegularNote: boolean)
 
 KeybindsChanged = Event({ string })
 
@@ -60,9 +60,11 @@ Message = Event(string)
 SettingChanged = Event(string, any) -- settings from the settings table below, does not apply for readonly values
 Changed = Event(string, any, isReadOnly: bool) -- same as previous one, but being fired ALSO for readonly values (e.g. normal values are being fired also)
 
+Supported = { [string]: number } -- scroll down in that code to see what it stores exactly
+
 ----
 
-print(settings.Keybinds[1]) -- will print the first keybind
+print(settings.Keybinds[1]) -- will print the first keybind, if has one, else nil
 
 ----
 
@@ -97,82 +99,18 @@ local game, workspace = game, workspace
 local wait, spawn = task.wait, task.spawn
 local max, min, clamp, abs, random, round = math.max, math.min, math.clamp, math.abs, math.random, math.round
 local inf = 1 / 0
-local insert, remove, find, pack, unpack, clone, sort, concat = table.insert, table.remove, table.find, table.pack, unpack or table.unpack, --[[table.clone]] function(t) local copy = { } for i, v in t do copy[i] = v end return copy end, table.sort, table.concat
+local insert, remove, find, clone, sort, concat = table.insert, table.remove, table.find, --[[table.clone]] function(t) local copy = { } for i, v in t do copy[i] = v end return copy end, table.sort, table.concat
 local v2, c3 = vector and vector.create or Vector2.new, Color3.new
 local ipairs = ipairs
-local tonumber, tostring = tonumber, tostring
-local error = error
+local tonumber = tonumber
 local pcall = pcall
-local typeof = typeof
-local smt = setmetatable
-local rawset = rawset
 
 local function toN(n)
 	return tonumber(n) or n
 end
 
 local oldSettings = clone(settings)
-
-local connectionBase = {
-	Disconnect = function(self)
-		rawset(self, "Connected", false)
-	end,
-	Fire = function(self, ...)
-		if not self.Connected then
-			error("Event is not connected!", 0)
-		end
-
-		if not self.Enabled then return end
-		spawn(self.Callback, ...)
-	end
-}
-
-connectionBase = { __index = connectionBase }
-
-local eventBase = {
-	Connect = function(self, func)
-		local connection = smt({ Callback = func, Connected = true, Enabled = true }, connectionBase)
-		insert(self._Connections, connection)
-
-		return connection
-	end,
-	Once = function(self, func)
-		local con; con = self:Connect(function(...)
-			con:Disconnect()
-			con = nil
-
-			func(...)
-		end)
-
-		return con
-	end,
-	Wait = function(self)
-		local result
-		self:Once(function(...)
-			result = pack(...)
-		end)
-
-		repeat wait() until result
-		return unpack(result, 1, result.n)
-	end,
-	Fire = function(self, ...)
-		local cons = self._Connections
-		for i = 1, #cons do
-			local v = cons[i]
-			if v and v.Connected then
-				v:Fire(...)
-			else
-				remove(cons, i)
-			end
-		end
-	end
-}
-
-eventBase = { __index = eventBase }
-
-local newEvent = function()
-	return smt({ _Connections = { } }, eventBase)
-end
+local newEvent = loadstring(game:HttpGet("https://raw.githubusercontent.com/Null-Cherry/Utilities/refs/heads/main/Event/Main.lua"))()
 
 local settingChanged = newEvent()
 local changed = newEvent()
@@ -183,6 +121,22 @@ local gameStarted = newEvent()
 local gameEnded = newEvent()
 local message = newEvent()
 local keybindsChanged = newEvent()
+
+local guiServ = game:GetService("GuiService")
+local uis = game:GetService("UserInputService")
+local escOpen, buzy = guiServ.MenuIsOpen, uis:GetFocusedTextBox() ~= nil
+
+guiServ.MenuClosed:Connect(function()
+	escOpen = false
+end)
+
+guiServ.MenuOpened:Connect(function()
+	escOpen = true
+end)
+
+uis.InputBegan:Connect(function(i, g)
+	buzy = g
+end)
 
 settingChanged:Connect(function(setting, value)
 	if setting == "AutoPlay" then
@@ -213,10 +167,18 @@ local events = { -- not actually only events
 	KeybindsChanged = keybindsChanged,
 
 	SettingChanged = settingChanged, -- (setting, value)
-	Changed = changed, -- save as previous one, but applies also for readonly values
+	Changed = changed, -- same as previous one, but applies also for readonly values
 
 	GameStarted = gameStarted,
-	GameEnded = gameEnded
+	GameEnded = gameEnded,
+	
+	Supported = (table and table.freeze or function(t) return t end)({ -- 2 = supported, 1 = poorly supported, 0 = not supported
+		["SV"] = 1,
+		["Mod charts"] = 2,
+		["Multi-key"] = 2,
+		["60 FPS+"] = 2,
+		["Start mid-song"] = 0
+	})
 }
 
 local function getUnrepeated(data)
@@ -291,20 +253,22 @@ end
 local plr = game:GetService("Players").LocalPlayer
 local pgui = plr:WaitForChild("PlayerGui", 9e9)
 local rs = game:GetService("RunService")
-local uis = game:GetService("UserInputService")
 local kk = Enum.KeyCode
 local vim = game:GetService("VirtualInputManager")
 local rse = rs.RenderStepped
 local isMobile = uis.TouchEnabled and not uis.KeyboardEnabled
 
 local function r(times)
-	local dt = tick()
-
-	for i = 1, tonumber(times) or 1 do
+	local dt = 0
+	
+	for i = 1, max(round(tonumber(times) or 1), 1) do
+		local s = tick()
 		rse:Wait()
+		
+		dt += tick() - s
 	end
 
-	return tick() - dt
+	return dt
 end
 
 local function getAverage(t)
@@ -352,36 +316,36 @@ spawn(function()
 
 		local Changed = false
 		local chancesChanged = false
-		
+
 		for i, v in settings do
 			if oldSettings[i] ~= v then
 				local isReadOnly = readonlyLookup[i]
 				if not isReadOnly then
 					settingChanged:Fire(i, v)
 				end
-				
+
 				changed:Fire(i, v, isReadOnly)
 				Changed = true
 				chancesChanged = chancesChanged or i == "Chances"
 				oldSettings[i] = v
 			end
 		end
-		
+
 		if not chancesChanged then
 			local chances = settings.Chances
 			Changed = false
-			
+
 			for i, v in chances do
 				if oldChances[i] ~= v then
 					Changed = true
-                    oldChances[i] = v
+					oldChances[i] = v
 				end
 			end
 
-            if Changed then
+			if Changed then
 				settingChanged:Fire("Chances", chances)
 				changed:Fire("Chances", chances, false)
-            end
+			end
 		end
 	end
 end)
@@ -514,8 +478,6 @@ end
 
 local dummy = { }
 local function noteAdded(v, notest, mine, lane)
-	note:Fire(v, mine, lane)
-
 	local isGood = not find(badNoteAssets, v:WaitForChild("LayeredSprite", 9e9):WaitForChild("2", 9e9).Image)
 	local toInsert
 	if isGood then
@@ -528,6 +490,7 @@ local function noteAdded(v, notest, mine, lane)
 		toInsert = dummy
 	end
 
+	note:Fire(v, mine, lane, isGood)
 	insert(toInsert, v)
 
 	renderedOnLanes[lane] = renderedOnLanes[lane] or 0
@@ -546,7 +509,7 @@ local function noteAdded(v, notest, mine, lane)
 
 	gpcs(v, "Parent"):Wait()
 
-	noteRemoved:Fire(v, mine, lane)
+	noteRemoved:Fire(v, mine, lane, isGood)
 
 	renderedOnLanes[lane] -= val
 	settings.NotesRendered -= 1
@@ -583,7 +546,7 @@ local function laneAdded(lane, isMine, notest, cons, receptors)
 	if isMine then
 		lanes = max(lanes, laneNum)
 		settings.Lanes = lanes
-		
+
 		wait(); r()
 
 		if lanes == laneNum then
@@ -670,7 +633,7 @@ local offsets = {
 
 for i, v in offsets do
 	if i ~= "Miss" then
-		offsets[i] = v - 0.005
+		offsets[i] = v - 0.0075
 	end
 end
 
@@ -712,7 +675,7 @@ local function pressKey(key, duration)
 		press(kk, false)
 	end
 
-	if kpsCount(key) then return end
+	if kpsCount(key) or escOpen or buzy then return end
 
 	local myId = (keys[key] or 0) + 1
 	keys[key] = myId
@@ -879,13 +842,13 @@ end
 local function isDownS(notes, receptors)
 	local topOnes = 0
 	local allNotes = 0
-	
+
 	for laneIndex, lane in notes do
 		local receptor = receptors[laneIndex]
-		
+
 		if receptor then
 			allNotes += #lane
-			
+
 			for _, note in lane do
 				if note.Position.Y.Scale < receptor.Position.Y.Scale + 0.5 then
 					topOnes += 1
@@ -911,12 +874,12 @@ local function calculateNotes(notes, receptors)
 		end
 	end
 
-	local delta = r()
+	local delta = r(fps / 48)
 	if #startPositions == 0 then return end -- no notes
 
 	local gotSpeed = 0
 	local dlt = min(delta, 0.1)
-	
+
 	if not isModChart and ap then
 		for _, v in startPositions do
 			if getDistance(UDimToVector2(v[4].Position), v[3]) / dlt > 0.1 then
@@ -925,7 +888,7 @@ local function calculateNotes(notes, receptors)
 			end
 		end
 	end
-	
+
 	if isModChart and ap then
 		local isDown = isDownS(notes, receptors)
 
@@ -934,7 +897,7 @@ local function calculateNotes(notes, receptors)
 				swap(v)
 			end
 		end
-		
+
 		isDownScroll = isDown
 		settings.DownScroll = isDownScroll
 	end
@@ -999,7 +962,7 @@ local function mainLoop(fields, window, dontStartAutoplay)
 				if iHaveNotes then break end
 			end
 
-			local mine = iHaveNotes or cn
+			local mine = iHaveNotes or not cn
 			calculateNotes(mine and myNotes or enemyNotes, mine and myReceptors or enemyReceptors)
 		else
 			r()
@@ -1216,7 +1179,7 @@ local function onWindow(window, dontStartAutoplay)
 	end
 end
 
-smt(settings, { __index = function(self, key) return key == "Events" and events or events[key] end })
+setmetatable(settings, { __index = function(self, key) return key == "Events" and events or events[key] end })
 global[key] = settings
 
 local hasWindow = pgui:FindFirstChild("Window")
