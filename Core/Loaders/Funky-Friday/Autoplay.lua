@@ -498,7 +498,7 @@ local function noteAdded(v, notest, mine, lane)
 	insert(toInsert, v)
 
 	renderedOnLanes[lane] = renderedOnLanes[lane] or 0
-	local visible = perf >= 4 and mine and renderedOnLanes[lane] <= 64 // scrollSpeed and (renderedOnLanes[lane] <= 16 // scrollSpeed or renderedOnLanes[lane] % (8 * scrollSpeed // 1) == 0) or perf < 4
+	local visible = perf >= 4 and (mine and renderedOnLanes[lane] <= 64 // scrollSpeed and (renderedOnLanes[lane] <= 16 // scrollSpeed or renderedOnLanes[lane] % (8 * scrollSpeed // 1) == 0) or not mine) or perf < 4
 	local val = visible and 1 or 0
 
 	renderedOnLanes[lane] += val
