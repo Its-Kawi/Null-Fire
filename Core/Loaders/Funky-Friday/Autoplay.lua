@@ -7,7 +7,7 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.22", -- autoplayer version
+	Version = "1.23", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
@@ -44,7 +44,7 @@ local settings = {
 }
 
 --[[ Extra readonly values:
-Keybinds = { string }
+Keybinds = { string? }
 Events = { [string] = Event } -- a table that stores next events:
 
 NoteAdded = Event(instance, isMine: boolean, isRegularNote: boolean)
@@ -134,8 +134,12 @@ guiServ.MenuOpened:Connect(function()
 	escOpen = true
 end)
 
-uis.InputBegan:Connect(function(i, g)
-	buzy = g
+uis.TextBoxFocused:Connect(function()
+	buzy = true
+end)
+
+uis.TextBoxFocusReleased:Connect(function()
+	buzy = false
 end)
 
 settingChanged:Connect(function(setting, value)
@@ -908,6 +912,8 @@ local function calculateNotes(notes, receptors)
 
 	speed = gotSpeed / #startPositions
 	scrollSpeed = round(speed * ssMul) / 100
+	
+	warn(scrollSpeed)
 
 	settings.ScrollSpeed = speed
 	settings.IsModChart = isModChart
@@ -1156,7 +1162,7 @@ local function onWindow(window, dontStartAutoplay)
 		if setting ~= "Performance" then return end
 
 		mySide.Visible = value <= 5
-		enemySide.Visible = value <= 2
+		enemySide.Visible = value <= 4
 		accuracy.Visible = value <= 1
 		black.BackgroundTransparency = value >= 3 and 0 or 1
 
