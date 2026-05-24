@@ -7,7 +7,7 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.23", -- autoplayer version
+	Version = "1.231", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
@@ -33,6 +33,10 @@ local settings = {
 	DownScroll = false, -- on ModChart songs it sometimes can freak out, read only
 	Lanes = 0, -- e.g. how much keys are in the song (4, 5, 6, 7, 8, 9), read only
 	RenderDelta = 0, -- a literal (tick() - start) time between RenderStepped events, read only
+	MyNotesRendered = 0, -- you know the drill, read only
+	EnemyNotesRendered = 0, -- same here, read only
+	MyNotesVisible = 0, -- read only
+	EnemyNotesVisible = 0, -- read only
 
 	Chances = {
 		Sick = 100,
@@ -93,6 +97,7 @@ local perf = 0
 local chances = settings.Chances
 local rendered, total = 0, 0
 local renderedOnLanes = { }
+local renderedOnEnemyLanes = { }
 
 local tick = tick
 local game, workspace = game, workspace
@@ -480,7 +485,13 @@ local function gpcs(v, n)
 	return got
 end
 
+local function canRenderNote(lane, renderedOnLanes)
+	return renderedOnLanes[lane] <= 64 // scrollSpeed and (renderedOnLanes[lane] <= 16 // scrollSpeed or renderedOnLanes[lane] % (8 * scrollSpeed // 1) == 0)
+end
+
 local dummy = { }
+local ms, es = "MyNotes", "EnemyNotes"
+
 local function noteAdded(v, notest, mine, lane)
 	local isGood = not find(badNoteAssets, v:WaitForChild("LayeredSprite", 9e9):WaitForChild("2", 9e9).Image)
 	local toInsert
@@ -496,18 +507,23 @@ local function noteAdded(v, notest, mine, lane)
 
 	note:Fire(v, mine, lane, isGood)
 	insert(toInsert, v)
+	
+	local renderedOnLanes = mine and renderedOnLanes or renderedOnEnemyLanes
 
 	renderedOnLanes[lane] = renderedOnLanes[lane] or 0
-	local visible = perf >= 4 and (mine and renderedOnLanes[lane] <= 64 // scrollSpeed and (renderedOnLanes[lane] <= 16 // scrollSpeed or renderedOnLanes[lane] % (8 * scrollSpeed // 1) == 0) or not mine) or perf < 4
+	local visible = perf >= 4 and canRenderNote(lane, renderedOnLanes) or perf < 4
 	local val = visible and 1 or 0
+	local idx = mine and ms or es
 
 	renderedOnLanes[lane] += val
 	total += 1
 
+	settings[idx .. "Rendered"] += 1
 	settings.NotesRendered += 1
 	rendered += 1
 	actuallyVisible += val
 	settings.NotesVisible += val
+	settings[idx .. "Visible"] += val
 
 	v.Visible = visible
 
@@ -516,10 +532,12 @@ local function noteAdded(v, notest, mine, lane)
 	noteRemoved:Fire(v, mine, lane, isGood)
 
 	renderedOnLanes[lane] -= val
+	settings[idx .. "Rendered"] -= 1
 	settings.NotesRendered -= 1
 	rendered -= 1	
 	actuallyVisible -= val
-	settings.NotesVisible += val
+	settings.NotesVisible -= val
+	settings[idx .. "Visible"] -= val
 
 	local found = find(toInsert, v)
 	if found then
