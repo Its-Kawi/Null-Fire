@@ -7,7 +7,7 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.231", -- autoplayer version
+	Version = "1.24", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
@@ -681,26 +681,29 @@ local function kpsP(key)
 	settings.KPS -= 1
 end
 
-local function kpsCount(key)
+local function kpsCount(key, mine)
 	if maxkps > 0 and KPS > maxkps then return true end
 
 	kps[key] = kps[key] or 0
 	if maxkpspk > 0 and kps[key] > maxkpspk then return true end
 
-	spawn(kpsP, key)
+	spawn(kpsP, key, mine)
 end
 
-local function pressKey(key, duration)
+local myKPS = 0
+local function pressKey(key, duration, mine)
 	local kk = kk:FromName(key)
 	if downKeys[key] then
 		downKeys[key] = false
 		press(kk, false)
 	end
 
-	if kpsCount(key) or escOpen or buzy then return end
+	local val = mine and 1 or 0
+	if kpsCount(key, mine) or escOpen or buzy then return end
 
 	local myId = (keys[key] or 0) + 1
 	keys[key] = myId
+	myKPS += val
 
 	press(kk, true)
 
@@ -713,6 +716,8 @@ local function pressKey(key, duration)
 		downKeys[key] = false
 		press(kk, false)
 	end
+
+	myKPS -= val
 end
 
 local function isBehind(x, y)
@@ -770,7 +775,7 @@ local function sortLane(lane)
 	sort(lane, sortF)
 end
 
-local function hitNote(note, key, dist, sick, lane, force)
+local function hitNote(note, key, dist, sick, lane, force, mine)
 	local s = force or psick
 	if sick and s > 0 then
 		local t = dist * s - lastOffset
@@ -797,9 +802,9 @@ local function hitNote(note, key, dist, sick, lane, force)
 
 	time += holdTime
 	if holdTime ~= 0 then
-		pressKey(key, time > 0 and time)
+		pressKey(key, time > 0 and time, mine)
 	else
-		spawn(pressKey, key, time > 0 and time)
+		spawn(pressKey, key, time > 0 and time, mine)
 	end
 
 	local winner = raceEvents({ gpcs(note, "Parent"), gpcs(note, "Position") }, 0)
@@ -811,7 +816,7 @@ local function hitNote(note, key, dist, sick, lane, force)
 	end
 end
 
-local function hitLane(lane, laneIndex, receptor)
+local function hitLane(lane, laneIndex, receptor, mine)
 	if not receptor then return end
 
 	local key = kbs[laneIndex]
@@ -828,7 +833,7 @@ local function hitLane(lane, laneIndex, receptor)
 		local can, far, dist, sick, force = canHit(note, receptor, false, laneIndex)
 		if can then
 			remove(lane, 1)
-			spawn(hitNote, note, key, dist, sick, lane, force)
+			spawn(hitNote, note, key, dist, sick, lane, force, mine)
 		elseif not far then
 			if meetYouAgain then
 				local pos = find(lane, meetYouAgain)
@@ -855,7 +860,6 @@ local function msg(text)
 end
 
 local ssMul = 1 / 5 * 100
-
 local function swap(val)
 	val[1] = v2(-(val[1].X - 0.5) + 0.5, -(val[1].Y - 0.5) + 0.5, 0)
 	val[3] = v2(-val[3].X, -val[3].Y, 0)
@@ -882,7 +886,7 @@ local function isDownS(notes, receptors)
 	return topOnes / allNotes > 0.5
 end
 
-local function calculateNotes(notes, receptors)
+local function calculateNotes(notes, receptors, mine)
 	local startPositions = { }
 
 	for laneIndex, lane in notes do
@@ -896,7 +900,7 @@ local function calculateNotes(notes, receptors)
 		end
 	end
 
-	local delta = r(fps / 48)
+	local delta = r()
 	if #startPositions == 0 then return end -- no notes
 
 	local gotSpeed = 0
@@ -930,14 +934,12 @@ local function calculateNotes(notes, receptors)
 
 	speed = gotSpeed / #startPositions
 	scrollSpeed = round(speed * ssMul) / 100
-	
-	warn(scrollSpeed)
 
 	settings.ScrollSpeed = speed
 	settings.IsModChart = isModChart
 
 	for _, v in startPositions do
-		spawn(hitLane, v[5], v[6], v[4])
+		spawn(hitLane, v[5], v[6], v[4], mine)
 	end
 end
 
@@ -976,18 +978,21 @@ local function mainLoop(fields, window, dontStartAutoplay)
 		if not window.Parent then break end
 
 		if ap and not dontStartAutoplay then
-			local iHaveNotes = false
-			for _, v in myNotes do
-				for _ in v do
-					iHaveNotes = true
-					break
+			if cn or myKPS > 0 then
+				local iHaveNotes = false
+				for _, v in myNotes do
+					for _ in v do
+						iHaveNotes = true
+						break
+					end
+
+					if iHaveNotes then break end
 				end
 
-				if iHaveNotes then break end
+				calculateNotes(iHaveNotes and myNotes or enemyNotes, iHaveNotes and myReceptors or enemyReceptors, iHaveNotes)
+			else
+				calculateNotes(myNotes, myReceptors, true)
 			end
-
-			local mine = iHaveNotes or not cn
-			calculateNotes(mine and myNotes or enemyNotes, mine and myReceptors or enemyReceptors)
 		else
 			r()
 		end
