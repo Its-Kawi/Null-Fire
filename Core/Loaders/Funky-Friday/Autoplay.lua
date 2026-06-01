@@ -7,7 +7,7 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.24", -- autoplayer version
+	Version = "1.25", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
@@ -277,7 +277,7 @@ local function r(times)
 		dt += tick() - s
 	end
 
-	return dt
+	return dt - (tick() - tick())
 end
 
 local function getAverage(t)
@@ -511,7 +511,7 @@ local function noteAdded(v, notest, mine, lane)
 	local renderedOnLanes = mine and renderedOnLanes or renderedOnEnemyLanes
 
 	renderedOnLanes[lane] = renderedOnLanes[lane] or 0
-	local visible = perf >= 4 and canRenderNote(lane, renderedOnLanes) or perf < 4
+	local visible = perf >= 4 and (mine or perf < 5) and canRenderNote(lane, renderedOnLanes) or perf < 4
 	local val = visible and 1 or 0
 	local idx = mine and ms or es
 
@@ -978,7 +978,7 @@ local function mainLoop(fields, window, dontStartAutoplay)
 		if not window.Parent then break end
 
 		if ap and not dontStartAutoplay then
-			if cn or myKPS > 0 then
+			if cn and myKPS == 0 then
 				local iHaveNotes = false
 				for _, v in myNotes do
 					for _ in v do
