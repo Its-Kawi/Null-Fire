@@ -7,12 +7,13 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.251", -- autoplayer version
+	Version = "1.26", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
 	CopyEnemyNotes = false, -- I find this stupid
 	UseScrollSpeedBuffer = true, -- used for more precise scroll speed calculation
+	ScrollSpeedBufferSize = 1.25,
 
 	Performance = 0, -- 0 - 5. More value = less lags
 
@@ -101,6 +102,8 @@ local renderedOnLanes = { }
 local renderedOnEnemyLanes = { }
 local speedBuffer = { }
 local ussb = true
+local ssbs = 1.25
+local speed = 0
 
 local tick = tick
 local game, workspace = game, workspace
@@ -173,7 +176,9 @@ settingChanged:Connect(function(setting, value)
 		perf = value
 	elseif setting == "UseScrollSpeedBuffer" then
 		ussb = value
-		speedBuffer = { 0 }
+		speedBuffer = { speed }
+	elseif setting == "ScrollSpeedBufferSize" then
+		ssbs = value
 	end
 end)
 
@@ -739,7 +744,11 @@ local function isBehind(x, y)
 	return is
 end
 
-local speed = 0
+local sickOffset  = offsets.Sick
+local missOffset  = offsets.Miss
+local missOffset2 = offsets.Miss * 2
+local badOffset   = offsets.Bad
+
 local canHit; canHit = function(note, receptor, isBadNote, laneIndex)
 	local x = UDimToVector2(receptor.Position) + v2(useX and 0.5 or 0, 0.5, 0)
 	local y = UDimToVector2(note.Position)
@@ -755,7 +764,7 @@ local canHit; canHit = function(note, receptor, isBadNote, laneIndex)
 			for i, v in bad do
 				local d, b = canHit(v, note, true, laneIndex)
 				forceSick = forceSick or b and 1
-				if b and d < offsets.Miss or not b and d < dist then
+				if b and d < missOffset or not b and d < dist then
 					return false, false, dist, false, false
 				end
 			end
@@ -775,9 +784,11 @@ local lastOffset = 0
 
 spawn(function()
 	while true do
-		lastOffset = (wait(0.1) - 0.1) / 1.5
-		side = getMySide() or side
-		settings.Side = side
+		lastOffset = wait()
+		if not settings.Playing then
+			side = getMySide() or side
+			settings.Side = side
+		end
 	end
 end)
 
@@ -788,7 +799,7 @@ end
 local function hitNote(note, key, dist, sick, lane, force, mine)
 	local s = force or psick
 	if sick and s > 0 then
-		local t = dist * s - lastOffset
+		local t = s <= 1 and dist * s or dist + (sickOffset * (s - 1)) - lastOffset
 		if t > 0 then
 			wait(t)
 		end
@@ -943,7 +954,7 @@ local function calculateNotes(notes, receptors, mine)
 	end
 
 	local resultSpeed = gotSpeed / #startPositions
-	speed = ussb and append(speedBuffer, resultSpeed, fps * 1.25) or resultSpeed
+	speed = ussb and append(speedBuffer, resultSpeed, fps * ssbs) or resultSpeed
 	scrollSpeed = round(speed * ssMul) / 100
 	
 	settings.ScrollSpeed = speed
@@ -989,15 +1000,20 @@ local function mainLoop(fields, window, dontStartAutoplay)
 		if not window.Parent then break end
 
 		if ap and not dontStartAutoplay then
-			if cn and myKPS == 0 then
+			if cn and myKPS == 0 and speed ~= 0 then
 				local iHaveNotes = false
-				for _, v in myNotes do
-					for _ in v do
-						iHaveNotes = true
-						break
-					end
+				for laneIndex, v in myNotes do
+					local rec = myReceptors[laneIndex]
+					if rec then
+						for _, note in v do
+							if canHit(note, rec, true) <= missOffset2 then
+								iHaveNotes = true
+								break
+							end
+						end
 
-					if iHaveNotes then break end
+						if iHaveNotes then break end
+					end
 				end
 
 				calculateNotes(iHaveNotes and myNotes or enemyNotes, iHaveNotes and myReceptors or enemyReceptors, iHaveNotes)
@@ -1058,7 +1074,7 @@ local function statsAdded(stats, cons)
 		local hs = settings.MoreStats
 		if hs then
 			rows:Title(typeof(hs) == "string" and hs or false)
-			rows:Rendered("Rendered: " .. actuallyVisible .. " (" .. rendered .. ")")
+			rows:Rendered(perf < 4 and rendered or "Rendered: " .. actuallyVisible .. " (" .. rendered .. ")")
 			rows:TotalNotes(total, "~")
 			rows:AutoplayKPS(KPS)
 			rows:FPS("FPS: <font color=\"#" .. (estFps < 60 and c3(1):Lerp(c3(0, 1), estFps / 60) or estFps < 120 and c3(0, 1):Lerp(c3(1, 0, 1), (estFps - 60) / 60) or estFps < 240 and c3(1, 0, 1):Lerp(c3(0.33, 0, 1), (estFps - 120) / 120) or c3(0.6, 0.2, 1)):ToHex() .. "\">" .. ("%.1f"):format(estFps) .. "</font>")
