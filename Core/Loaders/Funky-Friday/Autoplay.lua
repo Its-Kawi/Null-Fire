@@ -7,11 +7,12 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.25", -- autoplayer version
+	Version = "1.251", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
 	CopyEnemyNotes = false, -- I find this stupid
+	UseScrollSpeedBuffer = true, -- used for more precise scroll speed calculation
 
 	Performance = 0, -- 0 - 5. More value = less lags
 
@@ -98,6 +99,8 @@ local chances = settings.Chances
 local rendered, total = 0, 0
 local renderedOnLanes = { }
 local renderedOnEnemyLanes = { }
+local speedBuffer = { }
+local ussb = true
 
 local tick = tick
 local game, workspace = game, workspace
@@ -116,6 +119,10 @@ end
 
 local oldSettings = clone(settings)
 local newEvent = loadstring(game:HttpGet("https://raw.githubusercontent.com/Null-Cherry/Utilities/refs/heads/main/Event/Main.lua"))()
+
+if global[key] then
+	return global[key]
+end
 
 local settingChanged = newEvent()
 local changed = newEvent()
@@ -164,6 +171,9 @@ settingChanged:Connect(function(setting, value)
 		hdr = abs(value)
 	elseif setting == "Performance" then
 		perf = value
+	elseif setting == "UseScrollSpeedBuffer" then
+		ussb = value
+		speedBuffer = { 0 }
 	end
 end)
 
@@ -932,9 +942,10 @@ local function calculateNotes(notes, receptors, mine)
 		gotSpeed += getDistance(UDimToVector2(v[2].Position) - (UDimToVector2(v[4].Position) - v[3]), v[1]) / delta
 	end
 
-	speed = gotSpeed / #startPositions
+	local resultSpeed = gotSpeed / #startPositions
+	speed = ussb and append(speedBuffer, resultSpeed, fps * 1.25) or resultSpeed
 	scrollSpeed = round(speed * ssMul) / 100
-
+	
 	settings.ScrollSpeed = speed
 	settings.IsModChart = isModChart
 
@@ -1143,6 +1154,7 @@ local function onWindow(window, dontStartAutoplay)
 	total = 0
 	kbVals = { }
 	badNotes = { }
+	speedBuffer = { 0 }
 	speed = 0
 	scrollSpeed = 0
 	settings.ScrollSpeed = 0
