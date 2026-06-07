@@ -7,7 +7,7 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.27", -- autoplayer version
+	Version = "1.271", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
@@ -1200,7 +1200,7 @@ local function calculateNotes(notes, receptors, mine)
 		prevSpeed = resultSpeed
 
 		lastJump = jump
-		if not isModChart and jump > (timePassed <= 30 and 0.135 or 0.167) then
+		if not isModChart and jump > ((timePassed <= 30 and 0.135 or 0.167) + ((lanes - 4) / 125)) then
 			spawn(SVC)
 		end
 	end
