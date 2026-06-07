@@ -4,5 +4,11 @@
         "Works": true,
 
         "Games": [ 189707 ]
+    },
+    "Funky-Friday": {
+        "Name": "Funky Friday",
+        "Works": true,
+
+        "Games": [ 2404080894 ]
     }
 }
