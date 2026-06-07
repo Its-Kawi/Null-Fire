@@ -1,5 +1,5 @@
-local global = getgenv and getgenv() or _G
-local kp, kr = keypress, keyrelease
+local global = getfenv().getgenv and getfenv().getgenv() or _G
+local kp, kr = getfenv().keypress, getfenv().keyrelease
 local key = "FFAutoplayLib"
 
 if global[key] then
@@ -7,14 +7,15 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.26", -- autoplayer version
+	Version = "1.27", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
 	CopyEnemyNotes = false, -- I find this stupid
 	UseScrollSpeedBuffer = true, -- used for more precise scroll speed calculation
 	ScrollSpeedBufferSize = 1.25,
-
+	DetectSV = true, -- detects SV songs and applies own fixes so it never misses/hits anything but sick
+	HitOffset = 0, -- seconds, can be negative
 	Performance = 0, -- 0 - 5. More value = less lags
 
 	MaxKPSPerKey = 0, -- 0 or less = inf
@@ -39,6 +40,19 @@ local settings = {
 	EnemyNotesRendered = 0, -- same here, read only
 	MyNotesVisible = 0, -- read only
 	EnemyNotesVisible = 0, -- read only
+	IsModChartSong = false, -- is modchart song, read only
+	IsSVSong = false, -- is SV song, read only
+	Rate = 1, -- song's rate (speed), read only
+	TimeLeft = 0, -- song's time left, read only
+	SongName = "", -- read only
+	TotalNotes = 0, -- how many notes been generated in our side and (if enabled in game's settings) enemy's side, read only
+	MyTotalNotes = 0, -- same as previous, but for your side, read only
+	EnemyTotalNotes = 0, -- read only
+	StaticHitOffset = 0, -- seconds, not implemented yet, read only
+	SongDuration = 0, -- how long the song is, read only
+	SongRealDuration = 0, -- same as previous value, but also is multiplied by rate, read only
+	SongNameColor = Color3.new(), -- useless thing, read only
+	SongDifficulty = "", -- e.g. Easy, Normal, Hard, Lunatic, etc, read only
 
 	Chances = {
 		Sick = 100,
@@ -86,7 +100,7 @@ Each Connection has
 	:Disconnect() -> never
 ]]
 
-local readonlyStats = { "Side", "Playing", "FPS", "NotesRendered", "KPS", "NotesVisible", "ScrollSpeed", "DownScroll", "Lanes", "RenderDelta" }
+local readonlyStats = (table and table.freeze or function(t) return t end)({ "Side", "MyTotalNotes", "EnemyTotalNotes", "StaticHitOffset", "TotalNotes", "Playing", "FPS", "NotesRendered", "KPS", "SongName", "NotesVisible", "ScrollSpeed", "MyNotesRendered", "EnemyNotesRendered", "EnemyNotesVisible", "MyNotesVisible", "DownScroll", "Lanes", "RenderDelta", "IsSVSong", "IsModChartSong", "Rate", "TimeLeft", "SongDuration", "SongRealDuration", "SongDifficulty" })
 
 local fps, estFps, lastDelta = 0, 0, 0
 local psick = false
@@ -104,10 +118,19 @@ local speedBuffer = { }
 local ussb = true
 local ssbs = 1.25
 local speed = 0
+local rate = 1
+local prevSpeed = false
+local SVMode = false
+local isModChart = false
+local sv = false
+local SV = false
+local SVDetectAttempts = 0
+local ho = 0
+local HO = 0
 
 local tick = tick
 local game, workspace = game, workspace
-local wait, spawn = task.wait, task.spawn
+local _wait, spawn = task.wait, task.spawn
 local max, min, clamp, abs, random, round = math.max, math.min, math.clamp, math.abs, math.random, math.round
 local inf = 1 / 0
 local insert, remove, find, clone, sort, concat = table.insert, table.remove, table.find, --[[table.clone]] function(t) local copy = { } for i, v in t do copy[i] = v end return copy end, table.sort, table.concat
@@ -115,13 +138,63 @@ local v2, c3 = vector and vector.create or Vector2.new, Color3.new
 local ipairs = ipairs
 local tonumber = tonumber
 local pcall = pcall
+local request = getfenv().request
 
 local function toN(n)
 	return tonumber(n) or n
 end
 
+local lastOffset = 0
+local function wait(t)
+	t = max(tonumber(t) or 0, 0)
+	local took = _wait(t)
+
+	if t == 0 then
+		lastOffset = took - t
+	end
+
+	return took
+end
+
 local oldSettings = clone(settings)
-local newEvent = loadstring(game:HttpGet("https://raw.githubusercontent.com/Null-Cherry/Utilities/refs/heads/main/Event/Main.lua"))()
+local function gHTTPG(url)
+	return game:HttpGet(url)
+end
+
+local function httpGet(url)
+	if request then
+		local result = request({ Url = url, Method = "GET", Headers = { } })
+		local success = result.Success or tostring(result.StatusCode):sub(1, 1) == "2"
+		return success and result.Body or "", success
+	else
+		local s, e = pcall(gHTTPG, url)
+		return s and e or "", s
+	end
+end
+
+local function urlLoad(url)
+	local ret
+	while wait() do
+		ret = nil
+
+		local r, s = httpGet(url)
+		if s then
+			ret = loadstring(r)
+
+			if ret then
+				ret = ret()
+
+				if ret then
+					break
+				end
+			end
+		end
+	end
+
+	return ret
+end
+
+local newEvent = urlLoad("https://raw.githubusercontent.com/Null-Cherry/Utilities/refs/heads/main/Event/Main.lua")
 
 if global[key] then
 	return global[key]
@@ -141,16 +214,23 @@ local guiServ = game:GetService("GuiService")
 local uis = game:GetService("UserInputService")
 local escOpen, buzy = guiServ.MenuIsOpen, uis:GetFocusedTextBox() ~= nil
 
+local buzyWarn, escWarn = pcall, pcall
+
 guiServ.MenuClosed:Connect(function()
 	escOpen = false
 end)
 
 guiServ.MenuOpened:Connect(function()
 	escOpen = true
+	escWarn()
 end)
 
-uis.TextBoxFocused:Connect(function()
+uis.TextBoxFocused:Connect(function(tb)
 	buzy = true
+
+	if buzyWarn() then
+		tb:ReleaseFocus()
+	end
 end)
 
 uis.TextBoxFocusReleased:Connect(function()
@@ -179,6 +259,10 @@ settingChanged:Connect(function(setting, value)
 		speedBuffer = { speed }
 	elseif setting == "ScrollSpeedBufferSize" then
 		ssbs = value
+	elseif setting == "DetectSV" then
+		sv = value
+	elseif setting == "HitOffset" then
+		ho = value
 	end
 end)
 
@@ -195,13 +279,17 @@ local events = { -- not actually only events
 
 	GameStarted = gameStarted,
 	GameEnded = gameEnded,
-	
-	Supported = (table and table.freeze or function(t) return t end)({ -- 2 = supported, 1 = poorly supported, 0 = not supported
-		["SV"] = 1,
-		["Mod charts"] = 2,
-		["Multi-key"] = 2,
-		["60 FPS+"] = 2,
-		["Start mid-song"] = 0
+
+	ReadOnlyStats = readonlyStats,
+
+	Supported = (table and table.freeze or function(t) return t end)({ -- 3 = supported, 2 = kinda supported, 1 = poorly supported, 0 = not supported
+		["SV"] = 2,
+		["Mod Charts"] = 3,
+		["Multi-Key"] = 3,
+		["60 FPS+"] = 3,
+		["Low FPS"] = 3,
+		["Down & Up scroll"] = 3,
+		["Start Auto Play mid-song"] = 0
 	})
 }
 
@@ -274,21 +362,95 @@ local function rollChance()
 	return "Sick"
 end
 
+local timeOut = 9e9
+local timePassed = 0
 local plr = game:GetService("Players").LocalPlayer
-local pgui = plr:WaitForChild("PlayerGui", 9e9)
+local pgui = plr:WaitForChild("PlayerGui", timeOut)
 local rs = game:GetService("RunService")
 local kk = Enum.KeyCode
 local vim = game:GetService("VirtualInputManager")
 local rse = rs.RenderStepped
 local isMobile = uis.TouchEnabled and not uis.KeyboardEnabled
 
+local topLabel
+local function decodeTime(time)
+	local split = time:split(":")
+	if #split == 1 then return tonumber(time) end
+
+	while #split < 4 do
+		insert(split, 1, 0)
+	end
+
+	return (split[1] * 86400) + (split[2] * 3600) + (split[3] * 60) + split[4]
+end
+
+spawn(function()
+	local unpack = unpack or table.unpack
+	local c3r, c3h = Color3.fromRGB, Color3.fromHex
+	
+	topLabel = pgui:WaitForChild("GameGui", timeOut):WaitForChild("Screen", timeOut):WaitForChild("TopLabel", timeOut):WaitForChild("Label", timeOut)
+	topLabel.Changed:Connect(function()
+		local text = topLabel.Text
+		local splitted = text:split("\n")
+
+		if #splitted == 3 then
+			local l1, l3 = splitted[1], splitted[3]
+			if l1:sub(-2, -1) == "x)" then
+				local endBracket = -3
+				while true do
+					if l1:sub(endBracket, endBracket) == "(" then
+						rate = tonumber(l1:sub(endBracket + 1, -3))
+						settings.Rate = rate
+						break
+					end
+
+					endBracket -= 1
+					if -endBracket > #l1 then
+						settings.Rate = 1
+						break
+					end
+				end
+			else
+				settings.Rate = 1
+			end
+			
+			local difficultyStart = l1:find("</font> (", 0, true)
+			if difficultyStart then
+				local difficultyEnd = l1:find(")", difficultyStart, true)
+				settings.SongDifficulty = l1:sub(difficultyStart + 9, difficultyEnd - 1)
+			end
+			
+			local colorStart = l1:find("><font color='", 0, true)
+			if colorStart then
+				local colorEnd = l1:find("'>", colorStart, true) + 1
+				local color = l1:sub(colorStart + 14, colorEnd - 2):gsub("\n\r\f\t\s\0 ", ""):lower()
+				
+				if color:sub(1, 3) == "rgb" then
+					settings.SongNameColor = c3r(unpack(color:sub(5, -2):split(",")))
+				elseif color:sub(1, 1) == "#" then
+					settings.SongNameColor = c3h(color:sub(2, -1))
+				end
+			end
+
+			settings.SongName = l1:sub((l1:find(")'>", 0, true)) + 3, (l1:find("</f", 0, true)) - 1)
+
+			local s, r = pcall(decodeTime, l3:sub(1, -10))
+			settings.TimeLeft = s and r or 0
+			settings.SongDuration = max(settings.TimeLeft, settings.SongDuration, 0)
+			settings.SongRealDuration = round(settings.SongDuration * settings.Rate)
+			
+			timePassed = round((settings.SongDuration - settings.TimeLeft) * settings.Rate)
+		end
+	end)
+end)
+
 local function r(times)
 	local dt = 0
-	
+
 	for i = 1, max(round(tonumber(times) or 1), 1) do
 		local s = tick()
 		rse:Wait()
-		
+
 		dt += tick() - s
 	end
 
@@ -303,36 +465,64 @@ local function getAverage(t)
 		avg += t[i]
 	end
 
-	avg = avg / l
+	avg /= l
 	return avg ~= avg and 0 or avg
 end
 
-local function append(t, v, s)
-	s = max(round(s), 1)
-	local len = #t
-	if len >= s then
-		remove(t, 1, len - s + 1)
+local function append(table, value, size)
+	local size = round(max(tonumber(size) or 0, 1))
+
+	while #table >= size do
+		remove(table, #table)
 	end
 
-	insert(t, v)
-	return getAverage(t)
+	insert(table, 1, value)
+	return getAverage(table)
 end
 
 local fpsBuffer = { }
 local readonlyLookup = { }
 local oldChances = clone(settings.Chances)
+local SVPS
 
 for _, v in readonlyStats do
 	readonlyLookup[v] = true
 end
 
 spawn(function()
+	local SVPSDefault = 1.5
+	local mul = 1.12
+	local SVPSMax = SVPSDefault * mul
+
+	SVPS = SVPSDefault
+
+	local function calcSVPSDef(rate)
+		local res = min(SVPSDefault / (rate ^ (rate ^ rate)), 1.4)
+		if res ~= res then
+			res = SVPSDefault
+		end
+
+		return res
+	end
+
+	local preCalc = calcSVPSDef(2.1)
+	local function calcSVPS()
+		local res = calcSVPSDef(rate)
+		if rate <= 1.8 then
+			return res
+		end
+
+		return max(res - preCalc, 0)
+	end
+
 	while true do
 		lastDelta = r()
 		fps = 1 / lastDelta
 		psick = fps > 20 and settings.PerfectSick or 0
+		SV = sv and SVMode
+		SVPS = calcSVPS()
+		HO = ho - ((SV or isModChart) and 0.0125 or 0) - 0.0075
 
-		append(fpsBuffer, fps, fps)
 		estFps = round(append(fpsBuffer, fps, fps) * 10) / 10
 
 		settings.FPS = estFps
@@ -470,7 +660,7 @@ local function raceEvents(events, timeout)
 end
 
 local labelAdded; labelAdded = function(laneNum, label, cons)
-	local textL = label:WaitForChild("Text", 9e9)
+	local textL = label:WaitForChild("Text", timeOut)
 	kbVals[laneNum] = kbVals[laneNum] or { }
 
 	local myIdx = #kbVals[laneNum] + 1
@@ -485,8 +675,7 @@ end
 
 local rolled = { }
 local badNotes = { }
-local isModChart = false
-local badNoteAssets = { "rbxassetid://116778203667435", "rbxassetid://116254476280414", "rbxassetid://91620137594170", "rbxassetid://84581380793886", "rbxassetid://74989444694115" }
+local badNoteAssets = { "rbxassetid://103483801062498", "rbxassetid://88530467220950", "rbxassetid://109130876544260", "rbxassetid://120222801097284", "rbxassetid://101951481332606" }
 local actuallyVisible = 0
 
 local gpcsCache = { }
@@ -501,18 +690,19 @@ local function gpcs(v, n)
 end
 
 local function canRenderNote(lane, renderedOnLanes)
-	return renderedOnLanes[lane] <= 64 // scrollSpeed and (renderedOnLanes[lane] <= 16 // scrollSpeed or renderedOnLanes[lane] % (8 * scrollSpeed // 1) == 0)
+	return renderedOnLanes[lane] <= (64 // (perf - 3)) // scrollSpeed and (renderedOnLanes[lane] <= (16 // (perf - 3)) // scrollSpeed or renderedOnLanes[lane] % ((8 * (perf - 3)) * scrollSpeed // 1) == 0)
 end
 
 local dummy = { }
-local ms, es = "MyNotes", "EnemyNotes"
+local ms, es = "My", "Enemy"
+local no, to = "Notes", "TotalNotes"
 
 local function noteAdded(v, notest, mine, lane)
-	local isGood = not find(badNoteAssets, v:WaitForChild("LayeredSprite", 9e9):WaitForChild("2", 9e9).Image)
+	local isGood = not find(badNoteAssets, v:WaitForChild("LayeredSprite", timeOut):WaitForChild("1", timeOut).Image)
 	local toInsert
 	if isGood then
 		toInsert = notest
-		rolled[v] = rollChance()
+		rolled[v] = SV and "Sick" or rollChance()
 	elseif mine then
 		toInsert = badNotes[lane] or { }
 		badNotes[lane] = toInsert
@@ -522,16 +712,19 @@ local function noteAdded(v, notest, mine, lane)
 
 	note:Fire(v, mine, lane, isGood)
 	insert(toInsert, v)
-	
+
 	local renderedOnLanes = mine and renderedOnLanes or renderedOnEnemyLanes
 
 	renderedOnLanes[lane] = renderedOnLanes[lane] or 0
-	local visible = perf >= 4 and (mine or perf < 5) and canRenderNote(lane, renderedOnLanes) or perf < 4
+	local visible = perf < 6 and (perf >= 4 and (mine or perf < 5) and canRenderNote(lane, renderedOnLanes) or perf < 4)
 	local val = visible and 1 or 0
-	local idx = mine and ms or es
+	local m = mine and ms or es
+	local idx = m .. no
 
 	renderedOnLanes[lane] += val
 	total += 1
+	settings.TotalNotes += 1
+	settings[m .. to] += 1
 
 	settings[idx .. "Rendered"] += 1
 	settings.NotesRendered += 1
@@ -576,7 +769,7 @@ local function laneAdded(lane, isMine, notest, cons, receptors)
 	notest[laneNum] = { }
 	notest = notest[laneNum]
 
-	local receptor = lane:WaitForChild("Receptor", 9e9)
+	local receptor = lane:WaitForChild("Receptor", timeOut)
 
 	receptors[laneNum] = receptor
 
@@ -619,7 +812,7 @@ local function laneAdded(lane, isMine, notest, cons, receptors)
 		end
 	end
 
-	local notes = lane:WaitForChild("Notes", 9e9)
+	local notes = lane:WaitForChild("Notes", timeOut)
 	local children = notes:GetChildren()
 
 	if #children ~= 0 then
@@ -634,8 +827,7 @@ local function laneAdded(lane, isMine, notest, cons, receptors)
 		end
 	end
 
-	cons[#cons + 1] = notes.ChildAdded:Connect(function(v)
-		local downscroll = v.Position.Y.Scale < receptor.Position.Y.Scale + 0.5
+	cons[#cons + 1] = notes.ChildAdded:Connect(function(v)local downscroll = v.Position.Y.Scale < receptor.Position.Y.Scale + 0.5
 		downscrollPropability = clamp((downscroll and power or -power) + downscrollPropability, -1, 1)
 		isDownScroll = downscrollPropability > 0
 		settings.DownScroll = isDownScroll
@@ -648,7 +840,7 @@ local function laneAdded(lane, isMine, notest, cons, receptors)
 		noteAdded(v, notest, not not isMine, laneNum)
 	end)
 
-	local labels = lane:WaitForChild("Labels", 9e9)
+	local labels = lane:WaitForChild("Labels", timeOut)
 	for i, v in labels:GetChildren() do
 		spawn(labelAdded, laneNum, v, cons)
 	end
@@ -668,11 +860,13 @@ local offsets = {
 	Miss = 0.3
 }
 
-for i, v in offsets do
-	if i ~= "Miss" then
-		offsets[i] = v - 0.0075
-	end
-end
+events.Offsets = (function()
+	local cloned = clone(offsets)
+	cloned.Miss = nil
+	;(table.freeze or function() end)(cloned)
+	
+	return cloned
+end)()
 
 local downKeys, keys = { }, { }
 local ske = vim.SendKeyEvent
@@ -745,17 +939,33 @@ local function isBehind(x, y)
 end
 
 local sickOffset  = offsets.Sick
+local sickOffset2 = offsets.Sick / 1.35
 local missOffset  = offsets.Miss
 local missOffset2 = offsets.Miss * 2
 local badOffset   = offsets.Bad
+local goodOffset  = offsets.Good
 
+local lastJump = 0
 local canHit; canHit = function(note, receptor, isBadNote, laneIndex)
 	local x = UDimToVector2(receptor.Position) + v2(useX and 0.5 or 0, 0.5, 0)
 	local y = UDimToVector2(note.Position)
 
 	local dist = getDistance(x, y) / speed
+	local behind = isBehind(x, y)
+
+	if behind then
+		dist += HO
+	else
+		dist -= HO
+	end
+
+	if dist < 0 then
+		dist = -dist
+		behind = not behind
+	end
+
 	if isBadNote then
-		return dist, isBehind(x, y)
+		return dist, behind
 	else
 		local bad = badNotes[laneIndex]
 		local forceSick = false
@@ -763,28 +973,28 @@ local canHit; canHit = function(note, receptor, isBadNote, laneIndex)
 		if bad then
 			for i, v in bad do
 				local d, b = canHit(v, note, true, laneIndex)
-				forceSick = forceSick or b and 1
+				forceSick = forceSick or b and d <= missOffset
 				if b and d < missOffset or not b and d < dist then
-					return false, false, dist, false, false
+					return false, behind, dist, false, false
 				end
 			end
 		end
 
-		if isBehind(x, y) then
-			return dist <= offsets.Bad, true, dist, false, false
+		if behind then
+			return dist <= badOffset, true, dist, dist <= sickOffset, false
 		end
 
-		local rolled = forceSick and "Sick" or rolled[note] or "Sick"
-		return rolled ~= "Miss" and dist <= offsets[rolled], false, dist, rolled == "Sick", forceSick
+		local rolled = not SV and not forceSick and rolled[note] or "Sick"
+		local sick = rolled == "Sick"
+
+		return rolled ~= "Miss" and dist <= offsets[rolled], false, dist, sick, SV and SVPS or forceSick
 	end
 end
 
 local one = UDim2.fromScale(1, 1)
-local lastOffset = 0
-
 spawn(function()
 	while true do
-		lastOffset = wait()
+		wait()
 		if not settings.Playing then
 			side = getMySide() or side
 			settings.Side = side
@@ -796,10 +1006,15 @@ local function sortLane(lane)
 	sort(lane, sortF)
 end
 
-local function hitNote(note, key, dist, sick, lane, force, mine)
-	local s = force or psick
+local longNoteIndex
+local function calc(v)
+	return abs(v.Size.Y.Scale / speed) + ((0.075 * rate) + 0.025)
+end
+
+local function hitNote(note, key, dist, sick, lane, force, mine, isBehind)
+	local s = SV and SVPS or force or psick
 	if sick and s > 0 then
-		local t = s <= 1 and dist * s or dist + (sickOffset * (s - 1)) - lastOffset
+		local t = isBehind and (s <= 1 and 0 or (sickOffset - dist) * (s - 1) - (0.001 + (lastOffset * 2))) or (s <= 1 and (dist * s) - (lastOffset / 2) or (dist + (sickOffset * (s - 1)) - (0.001 + (lastOffset * 2))))
 		if t > 0 then
 			wait(t)
 		end
@@ -814,16 +1029,25 @@ local function hitNote(note, key, dist, sick, lane, force, mine)
 	end
 
 	local holdTime = 0
-	for _, v in note:GetChildren() do
+	local children = note:GetChildren()
+	if not longNoteIndex then
+		for i, v in children do
+			if v and v.Size ~= one then
+				holdTime = calc(v)
+				longNoteIndex = i
+				break
+			end
+		end
+	else
+		local v = children[longNoteIndex]
 		if v and v.Size ~= one then
-			holdTime = abs(v.Size.Y.Scale / speed) + 0.1
-			break
+			holdTime = calc(v)
 		end
 	end
 
 	time += holdTime
 	if holdTime ~= 0 then
-		pressKey(key, time > 0 and time, mine)
+		pressKey(key, time > 0 and time < 1000 and time, mine)
 	else
 		spawn(pressKey, key, time > 0 and time, mine)
 	end
@@ -842,7 +1066,7 @@ local function hitLane(lane, laneIndex, receptor, mine)
 
 	local key = kbs[laneIndex]
 	local meetYouAgain
-	local maxIterations = #lane * 3
+	local maxIterations = #lane * (rendered > (30 / scrollSpeed) and 10 or 3)
 	local iterations = 0
 
 	while #lane ~= 0 and key and iterations < maxIterations do
@@ -854,7 +1078,7 @@ local function hitLane(lane, laneIndex, receptor, mine)
 		local can, far, dist, sick, force = canHit(note, receptor, false, laneIndex)
 		if can then
 			remove(lane, 1)
-			spawn(hitNote, note, key, dist, sick, lane, force, mine)
+			spawn(hitNote, note, key, dist, sick, lane, force, mine, far)
 		elseif not far then
 			if meetYouAgain then
 				local pos = find(lane, meetYouAgain)
@@ -907,6 +1131,16 @@ local function isDownS(notes, receptors)
 	return topOnes / allNotes > 0.5
 end
 
+local function SVC()
+	SVDetectAttempts += 1
+	SVMode = SVDetectAttempts >= 3
+	settings.IsSVSong = settings.IsSVSong or SVMode
+	wait(20)
+	SVDetectAttempts = SVDetectAttempts > 0 and SVDetectAttempts - 1 or 0
+	SVMode = SVDetectAttempts >= 3
+end
+
+local lastJump
 local function calculateNotes(notes, receptors, mine)
 	local startPositions = { }
 
@@ -954,11 +1188,25 @@ local function calculateNotes(notes, receptors, mine)
 	end
 
 	local resultSpeed = gotSpeed / #startPositions
-	speed = ussb and append(speedBuffer, resultSpeed, fps * ssbs) or resultSpeed
+	speedBuffer[1] = #speedBuffer == 0 and resultSpeed or speedBuffer[1]
+
+	speed = (SV or ussb) and append(speedBuffer, resultSpeed, fps * (SV and 3 or ssbs)) or resultSpeed
 	scrollSpeed = round(speed * ssMul) / 100
-	
+
+	if not prevSpeed then
+		prevSpeed = resultSpeed
+	elseif timePassed <= 50 then
+		local jump = abs(resultSpeed - prevSpeed) * delta
+		prevSpeed = resultSpeed
+
+		lastJump = jump
+		if not isModChart and jump > (timePassed <= 30 and 0.135 or 0.167) then
+			spawn(SVC)
+		end
+	end
+
 	settings.ScrollSpeed = speed
-	settings.IsModChart = isModChart
+	settings.IsModChartSong = isModChart
 
 	for _, v in startPositions do
 		spawn(hitLane, v[5], v[6], v[4], mine)
@@ -966,8 +1214,8 @@ local function calculateNotes(notes, receptors, mine)
 end
 
 local function mainLoop(fields, window, dontStartAutoplay)
-	local mySide = fields[side]:WaitForChild("Inner", 9e9)
-	local enemySide = fields[side == "Left" and "Right" or "Left"]:WaitForChild("Inner", 9e9)
+	local mySide = fields[side]:WaitForChild("Inner", timeOut)
+	local enemySide = fields[side == "Left" and "Right" or "Left"]:WaitForChild("Inner", timeOut)
 
 	local myNotes = { }
 	local enemyNotes = { }
@@ -1033,7 +1281,7 @@ end
 local function statsAdded(stats, cons)
 	if stats:FindFirstChild("Title") then return end
 
-	local row = stats:WaitForChild("Combo", 9e9):Clone()
+	local row = stats:WaitForChild("Combo", timeOut):Clone()
 	local rows = { }
 	local totalRows = 0
 
@@ -1168,24 +1416,36 @@ local function onWindow(window, dontStartAutoplay)
 
 	lanes = 0
 	total = 0
+	settings.TotalNotes = 0
+	settings.MyTotalNotes = 0
+	settings.EnemyTotalNotes = 0
+	settings.SongDuration = 0
+	settings.SongRealDuration = 0
+	settings.Rate = 1
+	settings.SongName = ""
+	settings.SongDifficulty = ""
+	settings.SongNameColor = c3()
 	kbVals = { }
 	badNotes = { }
-	speedBuffer = { 0 }
+	speedBuffer = { }
 	speed = 0
 	scrollSpeed = 0
+	prevSpeed = false
+	SVMode = false
+	SVDetectAttempts = -1 -- for a reason, when a song starts it will make jump from 0 to actual scroll speed
 	settings.ScrollSpeed = 0
 	isModChart = false
-	settings.IsModChart = false
+	settings.IsModChartSong = false
+	settings.IsSVSong = false
 	settings.Lanes = 0
-
 	settings.Playing = true
 
 	local cons = { }
-	local gameField = window:WaitForChild("Game", 9e9)
-	local fields = gameField:WaitForChild("Fields", 9e9)
+	local gameField = window:WaitForChild("Game", timeOut)
+	local fields = gameField:WaitForChild("Fields", timeOut)
 	fields = {
-		Left = fields:WaitForChild("Left", 9e9),
-		Right = fields:WaitForChild("Right", 9e9)
+		Left = fields:WaitForChild("Left", timeOut),
+		Right = fields:WaitForChild("Right", timeOut)
 	}
 
 	if isMobile then
@@ -1194,7 +1454,7 @@ local function onWindow(window, dontStartAutoplay)
 
 	spawn(mainLoop, fields, window, dontStartAutoplay)
 
-	local hud = gameField:WaitForChild("HUD", 9e9)
+	local hud = gameField:WaitForChild("HUD", timeOut)
 	if hud:FindFirstChild("Stats") then
 		spawn(statsAdded, hud.Stats, cons)
 	end
@@ -1207,7 +1467,7 @@ local function onWindow(window, dontStartAutoplay)
 
 	local mySide = fields[side]
 	local enemySide = fields[side == "Left" and "Right" or "Left"]
-	local accuracy = hud:WaitForChild("AccuracyGauge", 9e9):WaitForChild("Ticks", 9e9)
+	local accuracy = hud:WaitForChild("AccuracyGauge", timeOut):WaitForChild("Ticks", timeOut)
 
 	local function perfc(setting, value)
 		if setting ~= "Performance" then return end
@@ -1247,9 +1507,55 @@ end
 spawn(function()
 	while fps == 0 do r() end
 	r()
+	wait()
 
 	if hasWindow then
 		msg("Unable to start the autoplay:\nScript must be ran before the game starts")
+	end
+
+	local buzyWarned = false
+	local buzyWaiting = false
+	buzyWarn = function()
+		if buzyWaiting then return false end
+		buzyWaiting = true
+
+		while not settings.Playing do wait() end
+		buzyWaiting = false
+
+		if buzyWarned or not buzy then return false end
+
+		local before = buzyWarned
+		buzyWarned = true
+
+		msg("Auto Play cannot be working while you're focused on any kind of TextBox!")
+		return not before
+	end
+
+	local escWarned = false
+	local escWaiting = false
+	escWarn = function()
+		if escWaiting then return end
+		escWaiting = true
+
+		while not settings.Playing do wait() end
+		escWaiting = false
+
+		if escWarned or not escOpen then return end
+		escWarned = true
+
+		wait()
+		if plr:GetNetworkPing() < 0 then return end
+		msg("Auto Play cannot be working while ESC menu is open!")
+	end
+
+	if buzy then
+		buzyWarn()
+		uis:GetFocusedTextBox():ReleaseFocus()
+	end
+
+	local escWarned = false
+	if escOpen then
+		escWarn()
 	end
 
 	if not isMobile then
