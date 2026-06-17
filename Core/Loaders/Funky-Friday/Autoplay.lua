@@ -1326,7 +1326,7 @@ local function statsAdded(stats, cons)
 		local hs = settings.MoreStats
 		if hs then
 			rows:Title(typeof(hs) == "string" and hs or false)
-			rows:Rendered(perf < 4 and rendered or "Rendered: " .. actuallyVisible .. " (" .. rendered .. ")")
+			rows:Rendered((perf < 4 or actuallyVisible == rendered) and rendered or rendered and "Rendered: " .. actuallyVisible .. " (" .. rendered .. ")" or "Rendered: ?")
 			rows:TotalNotes(total, "~")
 			rows:AutoplayKPS(KPS)
 			rows:FPS("FPS: <font color=\"#" .. (estFps < 60 and c3(1):Lerp(c3(0, 1), estFps / 60) or estFps < 120 and c3(0, 1):Lerp(c3(1, 0, 1), (estFps - 60) / 60) or estFps < 240 and c3(1, 0, 1):Lerp(c3(0.33, 0, 1), (estFps - 120) / 120) or c3(0.6, 0.2, 1)):ToHex() .. "\">" .. ("%.1f"):format(estFps) .. "</font>")
