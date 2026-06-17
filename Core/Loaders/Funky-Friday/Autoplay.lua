@@ -7,7 +7,7 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.271", -- autoplayer version
+	Version = "1.28", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
@@ -230,10 +230,12 @@ uis.TextBoxFocused:Connect(function(tb)
 
 	if buzyWarn() then
 		tb:ReleaseFocus()
+		buzy = false
 	end
 end)
 
 uis.TextBoxFocusReleased:Connect(function()
+	wait()
 	buzy = false
 end)
 
@@ -696,9 +698,11 @@ end
 local dummy = { }
 local ms, es = "My", "Enemy"
 local no, to = "Notes", "TotalNotes"
+local black = c3()
 
 local function noteAdded(v, notest, mine, lane)
-	local isGood = not find(badNoteAssets, v:WaitForChild("LayeredSprite", timeOut):WaitForChild("1", timeOut).Image)
+	local sprite = v:WaitForChild("LayeredSprite", timeOut):WaitForChild("1", timeOut)
+	local isGood = sprite.ImageColor3 ~= black and not find(badNoteAssets, sprite.Image)
 	local toInsert
 	if isGood then
 		toInsert = notest
@@ -716,7 +720,7 @@ local function noteAdded(v, notest, mine, lane)
 	local renderedOnLanes = mine and renderedOnLanes or renderedOnEnemyLanes
 
 	renderedOnLanes[lane] = renderedOnLanes[lane] or 0
-	local visible = perf < 6 and (perf >= 4 and (mine or perf < 5) and canRenderNote(lane, renderedOnLanes) or perf < 4)
+	local visible = perf < 7 and (perf >= 4 and (mine or perf < 6) and canRenderNote(lane, renderedOnLanes) or perf < 4)
 	local val = visible and 1 or 0
 	local m = mine and ms or es
 	local idx = m .. no
