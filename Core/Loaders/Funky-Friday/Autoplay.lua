@@ -9,7 +9,7 @@ end
 local settings = {
 	Version = "1.28", -- autoplayer version
 
-	AutoPlay = true,
+	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
 	CopyEnemyNotes = false, -- I find this stupid
 	UseScrollSpeedBuffer = true, -- used for more precise scroll speed calculation
@@ -692,7 +692,11 @@ local function gpcs(v, n)
 end
 
 local function canRenderNote(lane, renderedOnLanes)
-	return renderedOnLanes[lane] <= (64 // (perf - 3)) // scrollSpeed and (renderedOnLanes[lane] <= (16 // (perf - 3)) // scrollSpeed or renderedOnLanes[lane] % ((8 * (perf - 3)) * scrollSpeed // 1) == 0)
+	local p3 = perf - 3
+	local p = p3 == 0 and 0.67 or p3 == -1 and 0.42
+	p3 = p and 1 / (p * 2) or p3
+	
+	return renderedOnLanes[lane] <= (64 // p3) // scrollSpeed and (renderedOnLanes[lane] <= (16 // p3) // scrollSpeed or renderedOnLanes[lane] % ((8 * p3) * scrollSpeed // 1) == 0)
 end
 
 local dummy = { }
@@ -720,7 +724,7 @@ local function noteAdded(v, notest, mine, lane)
 	local renderedOnLanes = mine and renderedOnLanes or renderedOnEnemyLanes
 
 	renderedOnLanes[lane] = renderedOnLanes[lane] or 0
-	local visible = perf < 7 and (perf >= 4 and (mine or perf < 7) and canRenderNote(lane, renderedOnLanes) or perf < 4)
+	local visible = perf < 7 and (perf >= 2 and (mine or perf < 7) and canRenderNote(lane, renderedOnLanes) or perf < 3)
 	local val = visible and 1 or 0
 	local m = mine and ms or es
 	local idx = m .. no
@@ -1476,8 +1480,8 @@ local function onWindow(window, dontStartAutoplay)
 	local function perfc(setting, value)
 		if setting ~= "Performance" then return end
 
-		mySide.Visible = value <= 5
-		enemySide.Visible = value <= 4
+		mySide.Visible = value < 6
+		enemySide.Visible = value < 5
 		accuracy.Visible = value <= 1
 		black.BackgroundTransparency = value >= 3 and 0 or 1
 
