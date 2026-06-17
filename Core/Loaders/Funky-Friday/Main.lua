@@ -11,6 +11,7 @@ end)
 local autoplayTab = window:AddTab("AP", { Text = "Auto Play", Icon = "l://play" })
 autoplayTab:AddLabel({ Text = "Auto Player version: <b>" .. lib.Version .. "</b>" })
 autoplayTab:AddLabel({ Text = "Quick fixes if autoplay does not work or works unstable:\n1. Change your note skin - sometimes autoplayer interprets your note skin as death/poison note\n2. Change your note skin from pure black - autoplayer also interprets them as death notes\n3. Hit Offset in Funky Friday's settings missmatch the one in the script\n4. Your executor rejects virtual inputs for some reason, try changing it\n5. Keybinds in Funky Friday settings aren't set properly" })
+autoplayTab:AddLabel({ Text = "If you found any bug or have a suggestion, join our discord server (NullFire tab)!" })
 
 local left = autoplayTab:AddLeftGroupbox({ Text = "Auto Play" })
 local skill, legacy
