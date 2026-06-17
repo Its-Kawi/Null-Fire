@@ -10,6 +10,7 @@ end)
 
 local autoplayTab = window:AddTab("AP", { Text = "Auto Play", Icon = "l://play" })
 autoplayTab:AddLabel({ Text = "Auto Player version: <b>" .. lib.Version .. "</b>" })
+autoplayTab:AddLabel({ Text = "Quick fixes if autoplay does not work or works unstable:\n1. Change your note skin - sometimes autoplayer interprets your note skin as death/poison note\n2. Change your note skin from pure black - autoplayer also interprets them as death notes\n3. Hit Offset in Funky Friday's settings missmatch the one in the script\n4. Your executor rejects virtual inputs for some reason, try changing it\n5. Keybinds in Funky Friday settings aren't set properly" })
 
 local left = autoplayTab:AddLeftGroupbox({ Text = "Auto Play" })
 local skill, legacy
@@ -148,15 +149,20 @@ left:AddSlider({
 
 left:AddSeparator()
 
+local round = math.round
 left:AddSlider({
 	Text = "Performance",
+	Tooltip = "More value = less lags during the game (removes some game's details to increase FPS)",
 	Value = lib.Performance,
 	Min = 0,
-	Max = 6,
+	Max = 7,
 	Step = 1,
 	AllowSetValue = true,
 	BypassSetValue = true,
 	Compact = true,
+	Format = function(self)
+		return round((self.Value / self.Max) * 100) .. "%"
+	end,
 	Callback = function(val)
 		lib.Performance = val
 	end
@@ -391,7 +397,7 @@ table.sort(ros)
 local typeof, tostring, find, round, max, min = typeof, tostring, table.find, math.round, math.max, math.min
 local add = { "Version", "AutoPlay" }
 local ignoreValues = { "RenderDelta", "FPS", "SongNameColor" }
-local always = { "Playing", "Side" }
+local always = { "Playing", "Side", "Version" }
 local unknown = { "ScrollSpeed" }
 local showIfNotZero = { "TotalNotes", "MyTotalNotes", "EnemyTotalNotes", "SongDuration", "SongRealDuration", "SongName", "Rate", "Lanes", "SongDifficulty", "SongName" }
 local playing = lib.Playing
