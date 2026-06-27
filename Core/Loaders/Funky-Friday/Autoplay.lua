@@ -7,7 +7,7 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.28", -- autoplayer version
+	Version = "1.281", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
@@ -1003,7 +1003,7 @@ local one = UDim2.fromScale(1, 1)
 spawn(function()
 	while true do
 		wait()
-		if not settings.Playing then
+		if true or not settings.Playing then
 			side = getMySide() or side
 			settings.Side = side
 		end
