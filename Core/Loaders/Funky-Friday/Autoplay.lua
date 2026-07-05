@@ -7,7 +7,7 @@ if global[key] then
 end
 
 local settings = {
-	Version = "1.281", -- autoplayer version
+	Version = "1.282", -- autoplayer version
 
 	AutoPlay = false,
 	PerfectSick = 0, -- 0 to 1, 0 = off, values above 1 can cause issues
@@ -157,44 +157,9 @@ local function wait(t)
 end
 
 local oldSettings = clone(settings)
-local function gHTTPG(url)
-	return game:HttpGet(url)
-end
 
-local function httpGet(url)
-	if request then
-		local result = request({ Url = url, Method = "GET", Headers = { } })
-		local success = result.Success or tostring(result.StatusCode):sub(1, 1) == "2"
-		return success and result.Body or "", success
-	else
-		local s, e = pcall(gHTTPG, url)
-		return s and e or "", s
-	end
-end
-
-local function urlLoad(url)
-	local ret
-	while wait() do
-		ret = nil
-
-		local r, s = httpGet(url)
-		if s then
-			ret = loadstring(r)
-
-			if ret then
-				ret = ret()
-
-				if ret then
-					break
-				end
-			end
-		end
-	end
-
-	return ret
-end
-
-local newEvent = urlLoad("https://raw.githubusercontent.com/Null-Cherry/Utilities/refs/heads/main/Event/Main.lua")
+local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or game:HttpGet("https://raw.githubusercontent.com/Null-Cherry/Utilities/refs/heads/main/Utility/Main.lua"))() end)()
+local newEvent = util:Event()
 
 if global[key] then
 	return global[key]
@@ -1003,10 +968,10 @@ local one = UDim2.fromScale(1, 1)
 spawn(function()
 	while true do
 		wait()
-		if true or not settings.Playing then
+		--if not settings.Playing then
 			side = getMySide() or side
 			settings.Side = side
-		end
+		--end
 	end
 end)
 
