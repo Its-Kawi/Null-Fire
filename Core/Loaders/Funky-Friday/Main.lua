@@ -1,6 +1,7 @@
 local cons = { }
-local window = loadstring(game:HttpGet("https://raw.githubusercontent.com/Null-Cherry/Null-Fire/refs/heads/main/Core/Libraries/Window/Main.lua", true))()
-local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Null-Cherry/Null-Fire/refs/heads/main/Core/Loaders/Funky-Friday/Autoplay.lua", true))()
+local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or game:HttpGet("https://raw.githubusercontent.com/Null-Cherry/Utilities/refs/heads/main/Utility/Main.lua"))() end)()
+local window = util:NullFireWindow()
+local lib = util:FunkyFridayAutoPlay()
 
 window = window(cons, ...)
 
