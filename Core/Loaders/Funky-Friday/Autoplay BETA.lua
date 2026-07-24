@@ -356,6 +356,11 @@ local missOffset2 = offsets.Miss * 2
 local badOffset   = offsets.Bad
 local goodOffset  = offsets.Good
 
+local offsetOffset = 0.01
+for i, v in offsets do
+	offsets[i] = v - offsetOffset
+end
+
 local canHit; canHit = function(note, data)
 	local x = UDimToVector2(data.Receptor.Position) + v2(useX and 0.5 or 0, 0.5, 0)
 	local y = UDimToVector2(note.Note.Position)
