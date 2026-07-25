@@ -171,6 +171,20 @@ local function UDimToVector2(ud)
 	return v2(useX and ud.X.Scale or 0, ud.Y.Scale, 0)
 end
 
+local function isDownS(data)
+	local topOnes = 0
+	local allNotes = #data.Notes
+	local receptor = data.Receptor
+
+	for laneIndex, note in data.Notes do
+		if note.Note.Position.Y.Scale < receptor.Position.Y.Scale + 0.5 then
+			topOnes += 1
+		end
+	end
+
+	return topOnes / allNotes > 0.75
+end
+
 local function sortLane(data)
 	local function sortF(a, b)
 		local cond = a.Note.Position.Y.Scale < b.Note.Position.Y.Scale
@@ -250,18 +264,7 @@ local function onLane(lane, data, sharedData)
 	end
 	
 	if #Notes > 0 then
-		local totalNotes = #Notes
-		local downScrollNotes = 0
-		
-		for i, v in Notes do
-			if v.Note.Position.Y.Scale < receptor.Position.Y.Scale + 0.5 then
-				downScrollNotes += 1
-			end
-		end
-		
-		local isDownScroll = downScrollNotes / totalNotes > 0.75
-		myData.IsDownScroll = isDownScroll
-		
+		myData.IsDownScroll = isDownS(myData)
 		sortLane(myData)
 	end
 	
@@ -356,7 +359,7 @@ local missOffset2 = offsets.Miss * 2
 local badOffset   = offsets.Bad
 local goodOffset  = offsets.Good
 
-local offsetOffset = 0.01
+local offsetOffset = 0.015
 for i, v in offsets do
 	offsets[i] = v - offsetOffset
 end
@@ -405,7 +408,7 @@ end
 
 local longNoteIndex
 local function calc(v, data)
-	return abs(v.Size.Y.Scale / data.ScrollSpeed) + 0.25
+	return abs(v.Size.Y.Scale / data.ScrollSpeed) + 0.075
 end
 
 local function raceEvents(events, timeout)
@@ -453,7 +456,7 @@ local function hitNote(note, data, dist, sick, force)
 	if note.Hit then return end
 	note.Hit = true
 
-	local time = 0.25
+	local time = 0.1
 	local holdTime = 0
 	local children = note.Note:GetChildren()
 	if not longNoteIndex then
@@ -522,6 +525,14 @@ end
 
 local finishes = 0
 local fe = event.new()
+local modChart = false
+
+local function swap(v0, v1)
+	v0 = v2(-(v0.X - 0.5) + 0.5, -(v0.Y - 0.5) + 0.5, 0)
+	v1 = v2(-v1.X, -v1.Y, 0)
+	
+	return v0, v1
+end
 
 local function processLane(lane, sharedData)
 	local note = lane.Notes[1]
@@ -541,11 +552,23 @@ local function processLane(lane, sharedData)
 	re:Wait()
 	
 	local took = tick() - start
-	local noteEnd, receptorEnd = UDimToVector2(note.Note.Position), UDimToVector2(receptor.Position)
+	local receptorEnd = UDimToVector2(receptor.Position)
 	local receptorTravel = receptorEnd - receptorStart
-	noteEnd -= receptorTravel
+	if not modChart and receptorTravel.Magnitude > 0.001 then
+		modChart = true
+		print("MODCHART DTC")
+	end
 	
-	lane.ScrollSpeed = getDistance(noteStart, noteEnd) / took
+	if modChart then
+		local isDown = isDownS(lane)
+		if isDown ~= lane.IsDownScroll then
+			lane.IsDownScroll = isDown
+			noteStart, receptorStart = swap(noteStart, receptorStart)
+			receptorTravel = receptorEnd - receptorStart
+		end
+	end
+	
+	lane.ScrollSpeed = getDistance(noteStart, UDimToVector2(note.Note.Position) - receptorTravel) / took
 	playLane(lane)
 	
 	finishes += 1
@@ -596,6 +619,7 @@ local function onWindow(window)
 	
 	warn("START")
 	
+	modChart = false
 	while window.Parent do
 		local myField = sharedData.Fields[side]
 		local oppositeField = sharedData.Fields[side == "Left" and "Right" or "Left"]
