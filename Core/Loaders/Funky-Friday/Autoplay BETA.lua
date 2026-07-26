@@ -17,7 +17,7 @@ local settings = {
 	SVEnabled = true,
 	
 	Performance = {
-		Notes = 0, -- 0 - 10. 0-8 decrease amount of notes that can be rendered, 9 hides opponent's side, 10 hides your's
+		Notes = 2, -- 0 - 10. 0-8 decrease amount of notes that can be rendered, 9 hides opponent's side, 10 hides your's
 		UI = 0, -- 0 - 3. 1 removes accuracy gauge, 2 removes indicators (sick, good, etc.), 3 hides the whole HUD 
 		
 		Disable3D = false
@@ -528,6 +528,7 @@ local offsetOffset = 0.01
 local hitOffset0 = offsets.Sick
 local hitOffset01 = hitOffset0 - offsetOffset
 local hitOffset02 = offsetOffset * 2
+local rendered = 0
 
 local function onNote(note, data, sharedData, isNew, isMine)
 	local sprite = note:WaitForChild("LayeredSprite"):WaitForChild("1")
@@ -570,12 +571,15 @@ local function onNote(note, data, sharedData, isNew, isMine)
 		DisplayCategory = cat,
 		CategoryName = catName
 	}
+	
+	local m = isMine and 1 or 0
 
 	total += 1
 	cat.TotalNotes += 1
 	cat.NotesRendered += 1
 	display.TotalNotes += 1
 	display.NotesRendered += 1
+	rendered += 1
 	
 	local rstack = renderStack[catName]
 	rstack[#rstack + 1] = note
@@ -596,6 +600,7 @@ local function onNote(note, data, sharedData, isNew, isMine)
 	
 	cat.NotesRendered -= 1
 	display.NotesRendered -= 1
+	rendered -= m
 	
 	noteRemoved:Fire(noteData)
 	noteData.Destroying:Fire()
@@ -734,7 +739,8 @@ spawn(function()
 			flushRenderStack()
 		end
 		
-		doSV = isSV and settings.SVEnabled
+		sve = settings.SVEnabled
+		doSV = isSV and sve
 	end
 end)
 
@@ -756,6 +762,7 @@ end
 local sickOffset  = offsets.Sick
 local sickOffset2 = offsets.Sick / 2
 local badOffset   = offsets.Bad
+local SVD = 0
 
 local canHit; canHit = function(note, data)
 	local x = UDimToVector2(data.Receptor.Position) + v2(useX and 0.5 or 0, 0.5, 0)
@@ -807,7 +814,7 @@ local canHit; canHit = function(note, data)
 				return dist <= badOffset, true, dist, dist <= sickOffset, false
 			end
 			
-			return rolled ~= "Miss" and (rolled == "FSick" and dist <= sickOffset or dist <= note.HitDistance), false, dist, sick, forceSick
+			return rolled ~= "Miss" and (rolled == "FSick" and dist <= sickOffset or sick and sve and SVD ~= 0 and dist <= note.HitDistance / ((SVD + 1.25) / 2) or (not sve or SVD == 0) and dist <= note.HitDistance), false, dist, sick, forceSick
 		end
 	end
 end
@@ -915,23 +922,27 @@ local function hitNote(note, data, dist, sick, force)
 	end
 end
 
-function playLane(lane) -- the reason why its so weird, because I DON'T KNOW HOW TO MAKE IT DIFFERENT. Different ones might be more performant, but the only song (AppleCore) just breaks it, making it no longer a full combo
-	local iterations = 0
-	local maxIterations = clamp(3250 / estFps, 10, 75)
+local function lerp(a, b, c)
+	return (a + (b - a) * c)
+end
 
-	while #lane.Notes ~= 0 and iterations < maxIterations do
-		local note = lane.Notes[1]
-		if not note then break end
-
+local rddtc = 175
+function playLane(lane)
+	local notes = lane.Notes
+	local toRemove = { }
+	for i = 1, #notes do
+		local note = notes[i]
 		local hit, far, dist, sick, force = canHit(note, lane)
 		if hit then
-			remove(lane.Notes, 1)
-			spawn(hitNote, note, lane, dist, sick, force)
-		elseif far then
-			sortLane(lane)
+			toRemove[#toRemove + 1] = i
+			defer(hitNote, note, lane, dist, sick, force)
+		else
+			break
 		end
-
-		iterations += 1
+	end
+		
+	for i = #toRemove, 1, -1 do
+		remove(notes, toRemove[i])
 	end
 end
 
@@ -990,7 +1001,7 @@ local function processLane(lane, sharedData)
 	end
 	
 	local rawSpeed = getDistance(noteStart, UDimToVector2(note.Note.Position) - receptorTravel) / took
-	lane.ScrollSpeed = append(lane.ScrollSpeedBuffer, rawSpeed, estFps / (doSV and 5 or 1))
+	lane.ScrollSpeed = append(lane.ScrollSpeedBuffer, rawSpeed, estFps / (doSV and 5 or 2))
 	globalScrollSpeed = append(globalScrollSpeedBuffer, rawSpeed, inf)
 	
 	if settings.AutoPlay then
@@ -1001,20 +1012,15 @@ local function processLane(lane, sharedData)
 	fe:Fire()
 end
 
-local SVD = 0
-local function SVDTC()
+local function SVDTC(first)
 	local mySongId = songId
 	
 	SVD += 1
 	
-	isSV = SVD >= 5
-	settings.Display.IsSV = isSV
+	isSV = SVD >= 4
+	settings.Display.IsSV = settings.Display.IsSV or isSV
 	
-	if isSV then
-		warn("SV DETECTED")
-	end
-	
-	wait(30 / rate)
+	wait((first and 50 or 30) / rate)
 	
 	if songId == mySongId then
 		SVD -= 1
@@ -1028,17 +1034,14 @@ spawn(function()
 		
 		local lastGlobal = globalScrollSpeed
 		local first = true
-		while wait(0.3 / (rate + 0.5)) and re:Wait() and settings.Playing do
+		while wait(0.15) and re:Wait() and settings.Playing do
 			local jump = globalScrollSpeed / lastGlobal
 			lastGlobal = globalScrollSpeed
 			globalScrollSpeedBuffer = { }
 			
-			if abs(1 - jump) > 0.08 / (rate + (1 - rate) * 0.6) then
-				if first then
-					first = false
-				else
-					spawn(SVDTC)
-				end
+			if abs(1 - jump) > 0.15 / lerp(rate, 1, 0.67) and rendered / lastGlobal < rddtc * rate then
+				spawn(SVDTC, first)
+				first = false
 			end
 		end
 	end
