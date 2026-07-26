@@ -14,6 +14,8 @@ local settings = {
 	CopyEnemyNotes = false, -- I find this stupid | When your lane has no arrows, it autoplays enemy's notes
 	HitOffset = 0,
 	
+	SVEnabled = true,
+	
 	Performance = {
 		Notes = 0, -- 0 - 10. 0-8 decrease amount of notes that can be rendered, 9 hides opponent's side, 10 hides your's
 		UI = 0, -- 0 - 3. 1 removes accuracy gauge, 2 removes indicators (sick, good, etc.), 3 hides the whole HUD 
@@ -509,6 +511,11 @@ noteRemoved:Connect(function()
 	end
 end)
 
+local dataIndex = {
+	[true] = "My",
+	[false] = "Enemy"
+}
+
 local offsets = {
 	Sick = 0.05,
 	Good = 0.1,
@@ -524,7 +531,16 @@ local hitOffset02 = offsetOffset * 2
 
 local function onNote(note, data, sharedData, isNew, isMine)
 	local sprite = note:WaitForChild("LayeredSprite"):WaitForChild("1")
-	local isGood = sprite.ImageColor3 ~= black and not find(badNoteAssets, sprite.Image)
+	local isBlack = sprite.ImageColor3 == black
+	
+	local n = dataIndex[isMine] .. "Notes"
+	local n2 = dataIndex[isMine] .. "BlackNotes"
+	
+	sharedData.Notes += 1
+	sharedData[n] += 1
+	sharedData[n2] += isBlack and isMine and 1 or 0
+	
+	local isGood = (not isBlack or sharedData[n2] / sharedData[n] > 0.75) and not find(badNoteAssets, sprite.Image)
 	local toInsert
 	if isGood then
 		toInsert = data.Notes
@@ -696,7 +712,7 @@ local lastPerf = settings.Performance.Notes
 
 local modChart = false
 local isSV = false
-local HO = 0
+local doSV = false
 
 spawn(function()
 	while true do
@@ -718,7 +734,7 @@ spawn(function()
 			flushRenderStack()
 		end
 		
-		HO = (isSV or not modChart) and 0 or -0.025
+		doSV = isSV and settings.SVEnabled
 	end
 end)
 
@@ -738,6 +754,7 @@ for i, v in offsets do
 end
 
 local sickOffset  = offsets.Sick
+local sickOffset2 = offsets.Sick / 2
 local badOffset   = offsets.Bad
 
 local canHit; canHit = function(note, data)
@@ -748,9 +765,9 @@ local canHit; canHit = function(note, data)
 	local behind = isBehind(data, x, y)
 
 	if behind then
-		dist += settings.HitOffset + HO
+		dist += settings.HitOffset
 	else
-		dist -= settings.HitOffset + HO
+		dist -= settings.HitOffset
 	end
 
 	if dist < 0 then
@@ -765,7 +782,7 @@ local canHit; canHit = function(note, data)
 
 		for i, v in data.BadNotes do
 			local d, b = canHit(v, data)
-			forceSick = forceSick or b and d <= missOffset
+			forceSick = forceSick or b and d <= missOffset and 1
 			
 			if b and d < missOffset or not b and d < dist then
 				return false, behind, dist, false, false
@@ -775,13 +792,16 @@ local canHit; canHit = function(note, data)
 		local rolled = not forceSick and note.Rolled or "FSick"
 		local sick = rolled == "Sick" or rolled == "FSick"
 
-		if isSV then
-			if behind then
+		if doSV or modChart then
+			if behind and sick then
 				return true, true, dist, false, false
 			end
 			
-			-- return rolled ~= "Miss" and (sick and dist <= sickOffset2 or dist <= note.HitDistance / 1.5), false, dist, sick, true
-			return false, false, dist, false, false
+			if (modChart or sick) and not doSV then
+				return rolled ~= "Miss" and (sick and dist <= sickOffset2 or dist <= note.HitDistance / (doSV and 1.5 or 1)), false, dist, sick, forceSick or modChart and 0.25 or 0
+			else
+				return false, false, dist, false, false
+			end
 		else
 			if behind then
 				return dist <= badOffset, true, dist, dist <= sickOffset, false
@@ -794,7 +814,7 @@ end
 
 local longNoteIndex
 local function calc(v, data)
-	return abs(v.Size.Y.Scale / data.ScrollSpeed) + (isSV and 1 or 0.075)
+	return abs(v.Size.Y.Scale / data.ScrollSpeed) + (doSV and 1 or 0.075)
 end
 
 local function raceEvents(events, timeout)
@@ -922,7 +942,7 @@ local function mcdf()
 	local mySongId = songId
 	modChartDetectBuffer += 1
 	
-	wait(30)
+	wait(30 / rate)
 	
 	if songId == mySongId then
 		modChartDetectBuffer -= 1
@@ -970,7 +990,7 @@ local function processLane(lane, sharedData)
 	end
 	
 	local rawSpeed = getDistance(noteStart, UDimToVector2(note.Note.Position) - receptorTravel) / took
-	lane.ScrollSpeed = append(lane.ScrollSpeedBuffer, rawSpeed, estFps / (isSV and 5 or 1))
+	lane.ScrollSpeed = append(lane.ScrollSpeedBuffer, rawSpeed, estFps / (doSV and 5 or 1))
 	globalScrollSpeed = append(globalScrollSpeedBuffer, rawSpeed, inf)
 	
 	if settings.AutoPlay then
@@ -994,7 +1014,7 @@ local function SVDTC()
 		warn("SV DETECTED")
 	end
 	
-	wait(30)
+	wait(30 / rate)
 	
 	if songId == mySongId then
 		SVD -= 1
@@ -1002,19 +1022,18 @@ local function SVDTC()
 	end
 end
 
-local q = 2 / 6
 spawn(function()
 	while true do
 		repeat wait() until settings.Playing
 		
 		local lastGlobal = globalScrollSpeed
 		local first = true
-		while wait(0.3 / rate) and re:Wait() and settings.Playing do
+		while wait(0.3 / (rate + 0.5)) and re:Wait() and settings.Playing do
 			local jump = globalScrollSpeed / lastGlobal
 			lastGlobal = globalScrollSpeed
 			globalScrollSpeedBuffer = { }
 			
-			if abs(1 - jump) > 0.05 / ((rate / 1.5) + q) then
+			if abs(1 - jump) > 0.08 / (rate + (1 - rate) * 0.6) then
 				if first then
 					first = false
 				else
@@ -1194,6 +1213,14 @@ local function onWindow(window)
 				Lanes = { }
 			},
 		},
+		
+		MyBlackNotes = 0,
+		EnemyBlackNotes = 0,
+		MyNotes = 0,
+		EnemyNotes = 0,
+		
+		Notes = 0,
+		
 		Working = true,
 		StoppedWorking = event.new(),
 		Window = window
