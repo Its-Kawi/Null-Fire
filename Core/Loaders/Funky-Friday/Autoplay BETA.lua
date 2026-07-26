@@ -156,6 +156,16 @@ local v2 = vector.create
 local round = math.round
 local clamp = math.clamp
 
+local function clone(a)
+	local b = { }
+	
+	for i, v in a do
+		b[i] = v
+	end
+	
+	return b
+end
+			
 local inf = 1 / 0
 
 local lastOffset = 0
