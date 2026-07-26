@@ -308,16 +308,24 @@ end
 
 local laneStates = { }
 local laneHitIndexes = { }
+local perLaneKPS = { }
 local KPS = 0
 local lastKeyHit = 0
 
-local function appendKPS()
+local function appendKPS(lane)
+	local d = settings.Display
+	
 	lastKeyHit = tick()
+	
 	KPS += 1
-	settings.Display.KPS = KPS
+	perLaneKPS[lane] = (perLaneKPS[lane] or 0) + 1
+	d.KPS = KPS
+	
 	wait(1)
+	
 	KPS -= 1
-	settings.Display.KPS = KPS
+	perLaneKPS[lane] -= 1
+	d.KPS = KPS
 end
 
 local function hitLane(laneIndex, duration)
@@ -328,7 +336,7 @@ local function hitLane(laneIndex, duration)
 		laneStates[laneIndex] = false
 	end
 
-	spawn(appendKPS)
+	spawn(appendKPS, laneIndex)
 	fireLane(laneIndex, true)
 	laneStates[laneIndex] = true
 	
@@ -348,12 +356,13 @@ end
 local kpsBuffers = { }
 local function tryHitLane(laneIndex, duration, skipWait)
 	local current = tick()
+	local k = settings.KPS
 	
-	local timeAllowed = settings.KPS.PerKey
+	local timeAllowed = k.PerKey
 	if timeAllowed <= 0 then timeAllowed = inf end
-	if current - (kpsBuffers[laneIndex] or 0) < 1 / timeAllowed then return false end
+	if current - (kpsBuffers[laneIndex] or 0) < 1 / timeAllowed and (perLaneKPS[laneIndex] or 0) < timeAllowed / 3 then return false end
 	
-	timeAllowed = settings.KPS.Global
+	timeAllowed = k.Global
 	if timeAllowed <= 0 then timeAllowed = inf end
 	if timeAllowed < KPS then return false end
 	
@@ -404,11 +413,10 @@ end
 
 local badNoteAssets = { "rbxassetid://103483801062498", "rbxassetid://88530467220950", "rbxassetid://109130876544260", "rbxassetid://120222801097284", "rbxassetid://101951481332606" }
 local black = c3n()
+local ch = settings.Chances
 
 local function rollChance()
 	local total = 0
-	local ch = settings.Chances
-
 	for _, weight in ch do
 		total += weight
 	end
@@ -489,24 +497,27 @@ local function flushRenderStackLevel(stack, category, isMine, perf)
 	return rendered
 end
 
+local notesperf = settings.Performance.Notes
 local function flushRenderStack()
 	local display = settings.Display
+	local lanes = display.Lanes
 	local i = 0
+	
 	for catName, stack in renderStack do
-		i += flushRenderStackLevel(stack, display.Lanes[catName], catName == boolIdx[true], settings.Performance.Notes)
+		i += flushRenderStackLevel(stack, lanes[catName], catName == boolIdx[true], notesperf)
 	end
 	
-	settings.Display.NotesVisible = i
+	display.NotesVisible = i
 end
 
 noteAdded:Connect(function()
-	if settings.Performance.Notes > 0 then
+	if notesperf > 0 then
 		flushRenderStack()
 	end
 end)
 
 noteRemoved:Connect(function()
-	if settings.Performance.Notes > 0 then
+	if notesperf > 0 then
 		flushRenderStack()
 	end
 end)
@@ -529,6 +540,7 @@ local hitOffset0 = offsets.Sick
 local hitOffset01 = hitOffset0 - offsetOffset
 local hitOffset02 = offsetOffset * 2
 local rendered = 0
+local spr = settings.Spray
 
 local function onNote(note, data, sharedData, isNew, isMine)
 	local sprite = note:WaitForChild("LayeredSprite"):WaitForChild("1")
@@ -558,7 +570,7 @@ local function onNote(note, data, sharedData, isNew, isMine)
 	local noteData = {
 		Note = note,
 		Rolled = rolled,
-		HitDistance = settings.Spray and (rolled == "Sick" and (random() * 0.075) - 0.025 - offsetOffset or max(offsets[rolled] - hitOffset0, 0) + hitOffset02 + (random() * hitOffset01)) or offsets[rolled] or hitOffset01,
+		HitDistance = spr and (rolled == "Sick" and (random() * 0.075) - 0.025 - offsetOffset or max(offsets[rolled] - hitOffset0, 0) + hitOffset02 + (random() * hitOffset01)) or offsets[rolled] or hitOffset01,
 		PSickAdjust = 0,
 		IsBad = not isGood,
 		IsNew = isNew,
@@ -583,7 +595,7 @@ local function onNote(note, data, sharedData, isNew, isMine)
 	
 	local rstack = renderStack[catName]
 	rstack[#rstack + 1] = note
-	note.Visible = settings.Performance.Notes <= 0
+	note.Visible = notesperf <= 0
 	
 	noteAdded:Fire(noteData)
 	
@@ -713,11 +725,17 @@ local rs = game:GetService("RunService")
 local re = rs.RenderStepped
 
 local ticks = 0
-local lastPerf = settings.Performance.Notes
+local lastPerf = notesperf
 
 local modChart = false
 local isSV = false
 local doSV = false
+
+local ho = settings.HitOffset
+local psick = settings.PerfectSick
+local hdv = settings.HoldDuration.Value
+local hdr = settings.HoldDuration.Random
+local ap = settings.AutoPlay
 
 spawn(function()
 	while true do
@@ -733,7 +751,7 @@ spawn(function()
 		estFps = append(fpsBuffer, fps, fps)
 		settings.FPS = estFps
 		
-		local currentPerf = settings.Performance.Notes
+		local currentPerf = notesperf
 		if lastPerf ~= currentPerf or ticks % 30 == 0 and currentPerf > 0 then
 			lastPerf = currentPerf
 			flushRenderStack()
@@ -741,6 +759,14 @@ spawn(function()
 		
 		sve = settings.SVEnabled
 		doSV = isSV and sve
+		ch = settings.Chances
+		ho = settings.HitOffset
+		spr = settings.Spray
+		notesperf = settings.Performance.Notes
+		psick = settings.PerfectSick
+		hdv = settings.HoldDuration.Value
+		hdr = settings.HoldDuration.Random
+		ap = settings.AutoPlay
 	end
 end)
 
@@ -772,9 +798,9 @@ local canHit; canHit = function(note, data)
 	local behind = isBehind(data, x, y)
 
 	if behind then
-		dist += settings.HitOffset
+		dist += ho
 	else
-		dist -= settings.HitOffset
+		dist -= ho
 	end
 
 	if dist < 0 then
@@ -856,7 +882,7 @@ local playLane
 
 local function hitNote(note, data, dist, sick, force)
 	local Note = note.Note
-	local s = force or settings.PerfectSick
+	local s = force or psick
 	local isBehind = Note.Position.Y.Scale < data.Receptor.Position.Y.Scale + 0.5
 	if data.IsDownScroll then
 		isBehind = not isBehind
@@ -872,9 +898,7 @@ local function hitNote(note, data, dist, sick, force)
 	if note.Hit then return end
 	note.Hit = true
 
-	local time = settings.HoldDuration.Value
-	local hdr = settings.HoldDuration.Random
-	
+	local time = hdv
 	if hdr > 0 then
 		time = max(time + (((random() * 1.25) - 0.25) * hdr), 0)
 	end
@@ -1004,7 +1028,7 @@ local function processLane(lane, sharedData)
 	lane.ScrollSpeed = append(lane.ScrollSpeedBuffer, rawSpeed, estFps / (doSV and 5 or 2))
 	globalScrollSpeed = append(globalScrollSpeedBuffer, rawSpeed, inf)
 	
-	if settings.AutoPlay then
+	if ap then
 		playLane(lane)
 	end
 	
@@ -1014,17 +1038,18 @@ end
 
 local function SVDTC(first)
 	local mySongId = songId
+	local d = settings.Display
 	
 	SVD += 1
 	
 	isSV = SVD >= 4
-	settings.Display.IsSV = settings.Display.IsSV or isSV
+	d.IsSV = d.IsSV or isSV
 	
 	wait((first and 50 or 30) / rate)
 	
 	if songId == mySongId then
 		SVD -= 1
-		settings.Display.IsSV = isSV
+		d.IsSV = isSV
 	end
 end
 
