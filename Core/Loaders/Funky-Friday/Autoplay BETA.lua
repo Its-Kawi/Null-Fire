@@ -757,9 +757,24 @@ spawn(function()
 			flushRenderStack()
 		end
 		
+		local newChances = clone(settings.Chances)
+		local onlySick = false
+		
+		for i, v in newChances do
+			if v <= 0 then
+				newChances[i] = nil
+			elseif i ~= "Sick" then
+				onlySick = false
+			end
+		end
+		
+		if onlySick then
+			newChances.Sick = nil
+		end
+		
 		sve = settings.SVEnabled
 		doSV = isSV and sve
-		ch = settings.Chances
+		ch = newChances
 		ho = settings.HitOffset
 		spr = settings.Spray
 		notesperf = settings.Performance.Notes
