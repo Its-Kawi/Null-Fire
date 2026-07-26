@@ -76,7 +76,7 @@ local settings = {
 		TimePassed = 0,
 	},
 
-	Spray = false,
+	Spray = false, -- aka Legit | makes ms splat when you hit notes, e.g. static 40 ms will turn into from 40 to -20 ms
 	PerfectSick = 0, -- 0 to 2
 	
 	Chances = {
@@ -1154,6 +1154,7 @@ local function resetState(sharedData)
 	SVD = 0
 	isSV = false
 	modChart = false
+	total = 0
 
 	for _, lane in settings.Display.Lanes do
 		for i in lane do
