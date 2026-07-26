@@ -165,7 +165,7 @@ local function clone(a)
 	
 	return b
 end
-			
+
 local inf = 1 / 0
 
 local lastOffset = 0
@@ -364,18 +364,13 @@ local function hitLane(laneIndex, duration)
 end
 
 local kpsBuffers = { }
+local kpsK, kpsG = settings.KPS.PerKey, settings.KPS.Global
+
 local function tryHitLane(laneIndex, duration, skipWait)
 	local current = tick()
 	local k = settings.KPS
 	
-	local timeAllowed = k.PerKey
-	if timeAllowed <= 0 then timeAllowed = inf end
-	if current - (kpsBuffers[laneIndex] or 0) < 1 / timeAllowed and (perLaneKPS[laneIndex] or 0) < timeAllowed / 3 then return false end
-	
-	timeAllowed = k.Global
-	if timeAllowed <= 0 then timeAllowed = inf end
-	if timeAllowed < KPS then return false end
-	
+	if current - (kpsBuffers[laneIndex] or 0) < 1 / kpsK or (perLaneKPS[laneIndex] or 0) < round(kpsK / 5) or kpsG < KPS then return false end
 	kpsBuffers[laneIndex] = current
 	
 	if skipWait then
@@ -792,6 +787,7 @@ spawn(function()
 		hdv = settings.HoldDuration.Value
 		hdr = settings.HoldDuration.Random
 		ap = settings.AutoPlay
+		kpsK, kpsG = settings.KPS.PerKey, settings.KPS.Global
 	end
 end)
 
