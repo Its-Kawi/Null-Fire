@@ -372,9 +372,7 @@ local function tryHitLane(laneIndex, duration, skipWait)
 	local current = tick()
 	local k = settings.KPS
 	
-	if (perLaneKPS[laneIndex] or 0) >= round(kpsK / 5) then
-		if current - (kpsBuffers[laneIndex] or 0) < 1 / kpsK or (perLaneKPS[laneIndex] or 0) > round(kpsK / 5) or kpsG < KPS then return false end
-	end
+	if (perLaneKPS[laneIndex] or 0) <= round(kpsK / 1.425) and current - (kpsBuffers[laneIndex] or 0) < 1 / kpsK or kpsG < KPS then return false end
 	
 	kpsBuffers[laneIndex] = current
 	
@@ -421,6 +419,8 @@ local function append(table, value, size)
 	return getAverage(table)
 end
 
+local rng = random()
+
 local badNoteAssets = { "rbxassetid://103483801062498", "rbxassetid://88530467220950", "rbxassetid://109130876544260", "rbxassetid://120222801097284", "rbxassetid://101951481332606" }
 local black = c3n()
 local ch = settings.Chances
@@ -431,7 +431,7 @@ local function rollChance()
 		total += weight
 	end
 
-	local r = random() * total
+	local r = rng * total
 	local sum = 0
 
 	for k, weight in ch do
@@ -580,7 +580,7 @@ local function onNote(note, data, sharedData, isNew, isMine)
 	local noteData = {
 		Note = note,
 		Rolled = rolled,
-		HitDistance = spr and (rolled == "Sick" and (random() * 0.075) - 0.025 - offsetOffset or max(offsets[rolled] - hitOffset0, 0) + hitOffset02 + (random() * hitOffset01)) or offsets[rolled] or hitOffset01,
+		HitDistance = spr and (rolled == "Sick" and (rng * 0.075) - 0.025 - offsetOffset or max(offsets[rolled] - hitOffset0, 0) + hitOffset02 + (rng * hitOffset01)) or offsets[rolled] or hitOffset01,
 		PSickAdjust = 0,
 		IsBad = not isGood,
 		IsNew = isNew,
@@ -792,6 +792,7 @@ spawn(function()
 		hdv = settings.HoldDuration.Value
 		hdr = settings.HoldDuration.Random
 		ap = settings.AutoPlay
+		rng = random()
 		
 		kpsK, kpsG = settings.KPS.PerKey, settings.KPS.Global
 		if kpsK == 0 then kpsK = inf end
@@ -929,7 +930,7 @@ local function hitNote(note, data, dist, sick, force)
 
 	local time = hdv
 	if hdr > 0 then
-		time = max(time + (((random() * 1.25) - 0.25) * hdr), 0)
+		time = max(time + (((rng * 1.25) - 0.25) * hdr), 0)
 	end
 	
 	local holdTime = 0
