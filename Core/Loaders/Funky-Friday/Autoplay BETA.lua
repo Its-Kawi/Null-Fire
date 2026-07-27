@@ -365,12 +365,17 @@ end
 
 local kpsBuffers = { }
 local kpsK, kpsG = settings.KPS.PerKey, settings.KPS.Global
+if kpsK == 0 then kpsK = inf end
+if kpsG == 0 then kpsG = inf end
 
 local function tryHitLane(laneIndex, duration, skipWait)
 	local current = tick()
 	local k = settings.KPS
 	
-	if current - (kpsBuffers[laneIndex] or 0) < 1 / kpsK or (perLaneKPS[laneIndex] or 0) < round(kpsK / 5) or kpsG < KPS then return false end
+	if (perLaneKPS[laneIndex] or 0) >= round(kpsK / 5) then
+		if current - (kpsBuffers[laneIndex] or 0) < 1 / kpsK or (perLaneKPS[laneIndex] or 0) > round(kpsK / 5) or kpsG < KPS then return false end
+	end
+	
 	kpsBuffers[laneIndex] = current
 	
 	if skipWait then
@@ -787,8 +792,8 @@ spawn(function()
 		hdv = settings.HoldDuration.Value
 		hdr = settings.HoldDuration.Random
 		ap = settings.AutoPlay
+		
 		kpsK, kpsG = settings.KPS.PerKey, settings.KPS.Global
-						
 		if kpsK == 0 then kpsK = inf end
 		if kpsG == 0 then kpsG = inf end
 	end
