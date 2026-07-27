@@ -809,8 +809,6 @@ local function isBehind(data, x, y)
 	return is
 end
 
-local missOffset  = offsets.Miss
-
 for i, v in offsets do
 	offsets[i] = v - offsetOffset
 end
@@ -818,9 +816,11 @@ end
 local sickOffset  = offsets.Sick
 local sickOffset2 = offsets.Sick / 2
 local badOffset   = offsets.Bad
+local missOffset  = offsets.Miss
+local missOffset2 = offsets.Miss * 2
 local SVD = 0
 
-local canHit; canHit = function(note, data)
+local canHit; canHit = function(note, data, far)
 	local x = UDimToVector2(data.Receptor.Position) + v2(useX and 0.5 or 0, 0.5, 0)
 	local y = UDimToVector2(note.Note.Position)
 
@@ -841,36 +841,40 @@ local canHit; canHit = function(note, data)
 	if note.IsBad then
 		return dist, behind
 	else
-		local forceSick = false
-
-		for i, v in data.BadNotes do
-			local d, b = canHit(v, data)
-			forceSick = forceSick or b and d <= missOffset and 1
-			
-			if b and d < missOffset or not b and d < dist then
-				return false, behind, dist, false, false
-			end
-		end
-
-		local rolled = not forceSick and note.Rolled or "FSick"
-		local sick = rolled == "Sick" or rolled == "FSick"
-
-		if doSV or modChart then
-			if behind and sick then
-				return true, true, dist, false, false
-			end
-			
-			if (modChart or sick) and not doSV then
-				return rolled ~= "Miss" and (sick and dist <= sickOffset2 or dist <= note.HitDistance / (doSV and 1.5 or 1)), false, dist, sick, forceSick or modChart and 0.25 or 0
-			else
-				return false, false, dist, false, false
-			end
+		if far then
+			return dist <= missOffset2
 		else
-			if behind then
-				return dist <= badOffset, true, dist, dist <= sickOffset, false
+			local forceSick = false
+
+			for i, v in data.BadNotes do
+				local d, b = canHit(v, data)
+				forceSick = forceSick or b and d <= missOffset and 1
+				
+				if b and d < missOffset or not b and d < dist then
+					return false, behind, dist, false, false
+				end
 			end
-			
-			return rolled ~= "Miss" and (rolled == "FSick" and dist <= sickOffset or sick and sve and SVD ~= 0 and dist <= note.HitDistance / ((SVD + 1.25) / 2) or (not sve or SVD == 0) and dist <= note.HitDistance), false, dist, sick, forceSick
+
+			local rolled = not forceSick and note.Rolled or "FSick"
+			local sick = rolled == "Sick" or rolled == "FSick"
+
+			if doSV or modChart then
+				if behind and sick then
+					return true, true, dist, false, false
+				end
+				
+				if (modChart or sick) and not doSV then
+					return rolled ~= "Miss" and (sick and dist <= sickOffset2 or dist <= note.HitDistance / (doSV and 1.5 or 1)), false, dist, sick, forceSick or modChart and 0.25 or 0
+				else
+					return false, false, dist, false, false
+				end
+			else
+				if behind then
+					return dist <= badOffset, true, dist, dist <= sickOffset, false
+				end
+				
+				return rolled ~= "Miss" and (rolled == "FSick" and dist <= sickOffset or sick and sve and SVD ~= 0 and dist <= note.HitDistance / ((SVD + 1.25) / 2) or (not sve or SVD == 0) and dist <= note.HitDistance), false, dist, sick, forceSick
+			end
 		end
 	end
 end
@@ -1323,8 +1327,10 @@ local function onWindow(window)
 		local mineHasNotes = false
 		for _, lane in myField.Lanes do
 			for _, note in lane.Notes do
-				mineHasNotes = true
-				break
+				if canHit(note, lane, true) then
+					mineHasNotes = true
+					break
+				end
 			end
 		end
 		
