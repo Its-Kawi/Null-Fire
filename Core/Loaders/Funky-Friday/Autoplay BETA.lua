@@ -1324,17 +1324,19 @@ local function onWindow(window)
 		local myField = sharedData.Fields[side]
 		local oppositeField = sharedData.Fields[side == "Left" and "Right" or "Left"]
 		
-		local mineHasNotes = false
-		for _, lane in myField.Lanes do
-			for _, note in lane.Notes do
-				if canHit(note, lane, true) then
-					mineHasNotes = true
-					break
+		local mineHasNotes = not settings.CopyEnemyNotes
+		if settings.CopyEnemyNotes then		
+			for _, lane in myField.Lanes do
+				for _, note in lane.Notes do
+					if canHit(note, lane, true) then
+						mineHasNotes = true
+						break
+					end
 				end
 			end
 		end
 		
-		local targetField = (mineHasNotes or not settings.CopyEnemyNotes) and myField or oppositeField
+		local targetField = mineHasNotes and myField or oppositeField
 		
 		finishes = 0
 		local need = 0
