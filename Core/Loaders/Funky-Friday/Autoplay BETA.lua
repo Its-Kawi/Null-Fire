@@ -101,7 +101,7 @@ local settings = {
 }
 
 local global = getfenv().getgenv and getfenv().getgenv() or _G
-local key = "FFAutoplayLib"
+local key = "FFAutoPlayLib"
 
 if global[key] then
 	return global[key]
@@ -1227,6 +1227,19 @@ songStarted:Connect(function(sharedData)
 		end
 	end)
 	
+	local indicators = { }
+	for i, v in hud:GetChildren() do
+		if v.Name == "Indicator" then
+			indicators[#indicators + 1] = v
+		end
+	end
+	
+	cons[#cons + 1] = hud.ChildAdded:Connect(function(child)
+		if child.Name == "Indicator" then
+			indicators[#indicators + 1] = child
+		end
+	end)
+	
 	while wait() and working do
 		local gauge = hud:FindFirstChild("AccuracyGauge")
 		if gauge then
@@ -1238,12 +1251,14 @@ songStarted:Connect(function(sharedData)
 			hud.Visible = settings.Performance.UI < 3
 			hud.AccuracyGauge.Visible = settings.Performance.UI < 1
 			
-			for i, v in hud:GetChildren() do
-				if v.Name == "Indicator" then
-					v.Visible = settings.Performance.UI < 2
-				end
+			for i, v in indicators do
+				v.Parent = settings.Performance.UI < 2 and hud or nil
 			end
 		end
+	end
+	
+	for i, v in indicators do
+		v:Destroy()
 	end
 	
 	set3d(true)
