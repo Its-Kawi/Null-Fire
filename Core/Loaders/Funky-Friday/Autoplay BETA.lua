@@ -10,11 +10,11 @@ local settings = {
 		Discord = "@its_kawi"
 	},
 
-	AutoPlay = true,
+	AutoPlay = false,
 	CopyEnemyNotes = false, -- I find this stupid | When your lane has no arrows, it autoplays enemy's notes
 	HitOffset = 0,
 
-	SVEnabled = true,
+	SVEnabled = false,
 
 	Performance = {
 		Notes = 2, -- 0 - 10. 0-8 decrease amount of notes that can be rendered, 9 hides opponent's side, 10 hides your's
@@ -29,11 +29,11 @@ local settings = {
 	},
 
 	HoldDuration = {
-		Value = 0.1, -- in seconds
+		Value = 0.05, -- in seconds
 		Random = 0.05 -- range: -25% to 100% | in seconds
 	},
 
-	MoreStats = true, -- if true, stats will have autoplayer stats also, if string, it will act as its "true", but will contain that one string on top of the stats
+	MoreStats = false, -- if true, stats will have autoplayer stats also, if string, it will act as its "true", but will contain that one string on top of the stats
 
 	TimeLeft = 0,
 	TimePassed = 0,
@@ -133,7 +133,7 @@ settings.Events = {
 }
 
 local plrs = game:GetService("Players")
-local plr = plrs.LocalPlayer
+local plr = plrs.LocalPlayer or plrs.PlayerAdded:Wait()
 local pgui = plr:WaitForChild("PlayerGui")
 
 local tick = tick
@@ -155,6 +155,7 @@ local abs = math.abs
 local v2 = vector.create
 local round = math.round
 local clamp = math.clamp
+local run_on_actor = getfenv().run_on_actor
 
 local function clone(a)
 	local b = { }
@@ -372,7 +373,7 @@ local function tryHitLane(laneIndex, duration, skipWait)
 	local current = tick()
 	local k = settings.KPS
 
-	if (perLaneKPS[laneIndex] or 0) <= round(kpsK / 1.425) and current - (kpsBuffers[laneIndex] or 0) < 1 / kpsK or kpsG < KPS then return false end
+	if (perLaneKPS[laneIndex] or 0) <= round(kpsK / 1.2) and current - (kpsBuffers[laneIndex] or 0) < 1 / kpsK or kpsG < KPS then return false end
 
 	kpsBuffers[laneIndex] = current
 
