@@ -15,6 +15,8 @@ local settings = {
 	HitOffset = 0,
 
 	SVEnabled = false,
+	
+	FrameworkConnected = false, -- read only
 
 	Performance = {
 		Notes = 2, -- 0 - 10. 0-8 decrease amount of notes that can be rendered, 9 hides opponent's side, 10 hides your's
@@ -262,6 +264,54 @@ spawn(function()
 		end
 	end)
 end)
+
+local actions
+if run_on_actor then
+	spawn(function()
+		local test = {
+			[0] = false, -- READY
+			false, -- SV Enabled
+			false -- Is SV
+		}
+		
+		spawn(run_on_actor, plr:WaitForChild("PlayerScripts"):WaitForChild("ClientActor"), [==[
+local c = ...
+local framework = getrenv()._G.Client
+
+local wait = task.wait
+
+if framework then
+	c[0] = true
+	repeat wait() until c[0] ~= true
+	
+	print("FRAMEWORK COMMUNICATION IS READY")
+else
+	return warn("FRAMEWORK NOT FOUND")
+end
+
+while wait(0.1) do
+	local myField = framework.VSRG.GameHandler.Field
+	if myField then
+		c[1] = myField.SVCharts or false
+		
+		local game = myField.Game
+		if game and game.Metadata then
+			c[2] = game.Metadata.IsSV or false
+		end
+	else
+		c[1] = false
+		c[2] = false
+	end
+end
+]==], test)
+
+		repeat wait() until test[0]
+		actions = test
+		test[0] = false
+		
+		settings.FrameworkConnected = true
+	end)
+end
 
 local inputs = { }
 local vsrgConnection, vsrgConn2
@@ -784,7 +834,7 @@ spawn(function()
 		end
 
 		sve = settings.SVEnabled
-		doSV = isSV and sve
+		doSV = actions and actions[1] and actions[2] or not actions and isSV and sve
 		ch = newChances
 		ho = settings.HitOffset
 		spr = settings.Spray
@@ -882,7 +932,7 @@ end
 
 local longNoteIndex
 local function calc(v, data)
-	return abs(v.Size.Y.Scale / data.ScrollSpeed) + (doSV and 1 or 0.075)
+	return abs(v.Size.Y.Scale / data.ScrollSpeed) + (doSV and 0.25 or 0.075)
 end
 
 local function raceEvents(events, timeout)
@@ -985,7 +1035,6 @@ local function lerp(a, b, c)
 	return (a + (b - a) * c)
 end
 
-local rddtc = 175
 function playLane(lane)
 	local notes = lane.Notes
 	local toRemove = { }
@@ -1090,19 +1139,23 @@ end
 
 spawn(function()
 	while true do
-		repeat wait() until settings.Playing
+		repeat wait(0.1) until settings.Playing or actions
 
 		local lastGlobal = globalScrollSpeed
 		local first = true
-		while wait(0.15) and re:Wait() and settings.Playing do
+		while wait(0.15) and re:Wait() and settings.Playing and not actions do
 			local jump = globalScrollSpeed / lastGlobal
 			lastGlobal = globalScrollSpeed
 			globalScrollSpeedBuffer = { }
 
-			if abs(1 - jump) > 0.15 / lerp(rate, 1, 0.67) and rendered / lastGlobal < rddtc * rate then
+			if abs(1 - jump) > 0.1 / lerp(rate, 1, 0.67) and rendered / lastGlobal < 175 * rate then
 				spawn(SVDTC, first)
 				first = false
 			end
+		end
+		
+		if actions then
+			break
 		end
 	end
 end)
@@ -1245,7 +1298,7 @@ songStarted:Connect(function(sharedData)
 		end
 	end)
 
-	while wait() and working do
+	while wait(0.1) and working do
 		local gauge = hud:FindFirstChild("AccuracyGauge")
 		if gauge then
 			if can3d then
