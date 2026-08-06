@@ -497,7 +497,7 @@ local function trySolvePuzzle(currentTubeGame)
 			Type = type,
 			Variant = obj[4],
 			Rotation = getTubeRotation(obj),
-			Fixed = type == "End",
+			Fixed = type ~= "Tube",
 			Start = type == "Start",
 			End = type == "End",
 			Instance = obj[1]
