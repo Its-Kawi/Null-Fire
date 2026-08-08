@@ -754,13 +754,13 @@ lib = {
 	ShowDebugUI = false,
 	
 	Solve = function(self, puzzle)
-		return solvePuzzle(puzzle)
+		return { solvePuzzle(puzzle) }
 	end,
 	SolveAndPlay = function(self, puzzle)
-		local solution, grid = self:Solve(puzzle)
-		return self:Play(solution, grid)
+		return self:PlaySolution(self:SolvePuzzle(puzzle))
 	end,
-	Play = function(self, rotations, grid)
+	Play = function(self, returned)
+		local rotations, grid = returned[1], returned[2]
 		local start = tick()
 
 		local puzzle
