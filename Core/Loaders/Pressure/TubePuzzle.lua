@@ -858,8 +858,7 @@ lib = {
 
 		wait(2 + plr:GetNetworkPing())
 		if find(activePuzzles, puzzle) then
-			local solution, grid = self:SolvePuzzle(puzzle)
-			self:PlaySolution(solution, grid)
+			self:SolveAndPlay(puzzle)
 		end
 
 		return tick() - start
