@@ -15,7 +15,8 @@ if global[key] then
 	return global[key]
 end
 
-local container = game:GetService("RunService"):IsStudio() and game:GetService("StarterGui") or game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+local plr = game:GetService("Players").LocalPlayer
+local container = game:GetService("RunService"):IsStudio() and game:GetService("StarterGui") or plr:WaitForChild("PlayerGui")
 local v2 = Vector2.new
 local name = "TubeGameDebugOutput"
 if container:FindFirstChild(name) then
@@ -462,6 +463,17 @@ local function trySolvePuzzle(currentTubeGame)
 		return rotationMap[v2ts(rOuts[1])] or 1
 	end
 
+	do
+		local v = currentTubeGame:WaitForChild("Power")
+		local pos = getPositionInGrid(v:GetPivot().Position)
+		local obj = { v, pos, "Start", getTubeVariant(v) }
+
+		grid[pos] = obj
+		gridReverse[obj] = pos
+
+		wait(plr:GetNetworkPing() + 0.05)
+	end
+
 	for i, v in children do
 		local pos = getPositionInGrid(v:GetPivot().Position)
 		local obj = { v, pos, "Tube", getTubeVariant(v) }
@@ -477,13 +489,6 @@ local function trySolvePuzzle(currentTubeGame)
 		grid[pos] = obj
 		gridReverse[obj] = pos
 	end
-	
-	local v = currentTubeGame:WaitForChild("Power")
-	local pos = getPositionInGrid(v:GetPivot().Position)
-	local obj = { v, pos, "Start", getTubeVariant(v) }
-
-	grid[pos] = obj
-	gridReverse[obj] = pos
 
 	virtualGrid = { }
 
@@ -745,7 +750,6 @@ local function solvePuzzle(puzzle)
 	return rotations, grid, tick() - start
 end
 
-local plr = game:GetService("Players").LocalPlayer
 lib = {
 	StartFPS = 144, -- less fps = faster calculate
 	EndFPS = 0.5,
