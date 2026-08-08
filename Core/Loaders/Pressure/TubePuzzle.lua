@@ -129,9 +129,6 @@ local activePuzzles = { }
 local tubeGameRoom, currentRoom, nextRoom
 local function onDesc(v)
 	if v.Name == "puzzle" then
-		puzzleAdded:Fire(v.Parent)
-		activePuzzles[#activePuzzles + 1] = v.Parent
-
 		local room = v.Parent:FindFirstAncestorOfClass("Model")
 		while true do
 			if room.Parent.Name ~= "Rooms" then
@@ -147,6 +144,11 @@ local function onDesc(v)
 		end
 
 		tubeGameRoom = room
+					
+		wait(plr:GetNetworkPing() + 0.5) -- prevents bugs when it detects tube minigame too early, causing it to look/act bad
+		
+		puzzleAdded:Fire(v.Parent)
+		activePuzzles[#activePuzzles + 1] = v.Parent
 	end
 end
 
@@ -588,6 +590,8 @@ local function trySolvePuzzle(currentTubeGame)
 	local succeedCV
 
 	local getPaths; getPaths = function(tube, previous, first, ignore, isFirst)
+		if not tube then return nil, false, false end
+		
 		local reachedStart = false
 		local isFinalPath = false
 
@@ -644,20 +648,15 @@ local function trySolvePuzzle(currentTubeGame)
 					ignore[val.pos] = true
 
 					local paths, rs, isFinal = getPaths(val, copy, first, ignore, false)
-					isFinalPath = isFinalPath or isFinal
-					tbl = { i, val.Position, paths }
+					if paths then
+						isFinalPath = isFinalPath or isFinal
+						tbl = { i, val.Position, paths }
 
-					if isFinalPath then
-						succeedCV = succeedCV or cloneVirtualGrid(currentVirtualGrid)
+						if isFinalPath then
+							succeedCV = succeedCV or cloneVirtualGrid(currentVirtualGrid)
+							break
+						end
 					end
-
-					local t = tick()
-					if t - lastTick > allowedTime then
-						wait()
-						lastTick = tick()
-					end
-
-					if isFinalPath then break end
 				end
 
 				if tbl then
