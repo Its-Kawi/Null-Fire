@@ -478,7 +478,7 @@ local function trySolvePuzzle(currentTubeGame)
 		gridReverse[obj] = pos
 	end
 	
-	local v = currentTubeGame.Power
+	local v = currentTubeGame:WaitForChild("Power")
 	local pos = getPositionInGrid(v:GetPivot().Position)
 	local obj = { v, pos, "Start", getTubeVariant(v) }
 
