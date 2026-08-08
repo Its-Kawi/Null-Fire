@@ -311,7 +311,7 @@ end)
 
 window = window(cons, ...)
 spawn(function()
-	window:Notification({ Title = "Beta", Text = "Warning: That script is in active development! More functions are coming soon!\n\nSome functions are not implemented:\nAuto Hide In Lockers\nTeleport to Lockers", Duration = 30, HasButtons = true })
+	window:Notification({ Title = "Beta", Text = "Warning: That script is in active development! More functions are coming soon!", Duration = 30, HasButtons = true })
 end)
 			
 local anti = window:AddTab("B", { Text = "Bypasses", Icon = "l://shield" })
@@ -492,10 +492,10 @@ end })
 
 hiding:AddToggle("3", { Text = "Use Lockers for Auto Hide", Value = false, Callback = function(val)
 	values.Other.UseLockers = val
-end })
+end, Visible = false })
 hiding:AddToggle("4", { Text = "Teleport to Lockers", Value = false, Callback = function(val)
 	values.Other.TeleportToLocker = val
-end })
+end, Visible = false })
 
 local looting = automation:AddRightGroupbox("L", { Text = "Interactions" })
 looting:AddToggle("1", { Text = "Auto Loot", Value = false, Callback = function(val)
