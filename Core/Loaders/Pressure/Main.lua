@@ -311,7 +311,7 @@ end)
 
 window = window(cons, ...)
 spawn(function()
-	window:Notification({ Title = "Beta", Text = "Warning: That script is in active development! More functions are coming soon!\nSome functions are not implemented:\nAuto Hide In Lockers\nTeleport to Lockers", Duration = 30, HasButtons = true })
+	window:Notification({ Title = "Beta", Text = "Warning: That script is in active development! More functions are coming soon!\n\nSome functions are not implemented:\nAuto Hide In Lockers\nTeleport to Lockers", Duration = 30, HasButtons = true })
 end)
 			
 local anti = window:AddTab("B", { Text = "Bypasses", Icon = "l://shield" })
