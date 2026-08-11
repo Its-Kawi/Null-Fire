@@ -1,5 +1,8 @@
 local cons = { }
-local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or game:HttpGet(string.char(104, 116, 116, 112, 115, 58, 47, 47, 114, 97, 119, 46, 103, 105, 116, 104, 117, 98, 117, 115, 101, 114, 99, 111, 110, 116, 101, 110, 116, 46, 99, 111, 109, 47, 78, 117, 108, 108, 45, 67, 104, 101, 114, 114, 121, 47, 85, 116, 105, 108, 105, 116, 105, 101, 115, 47, 114, 101, 102, 115, 47, 104, 101, 97, 100, 115, 47, 109, 97, 105, 110, 47, 85, 116, 105, 108, 105, 116, 121, 47, 77, 97, 105, 110, 46, 108, 117, 97)))() end)()
+
+local GITHUB = "https://raw.githubusercontent.com/Its-Kawi/"
+local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local url = GITHUB .. "Utilities/refs/heads/main/Utility/Main.lua" local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or getfenv().request and getfenv().request({ Url = url, Method = "GET" }).Body or game:HttpGet(url))() end)()
+
 local window = util:NullFireWindow()
 local esp = util:ESP()
 local lib = util:FunkyFridayAutoPlay()
@@ -8,15 +11,17 @@ esp:InitClass("Inactive Stages", { Color = Color3.fromRGB(85, 170, 127) })
 
 window = window(cons, ...)
 
+if true then return end
+
 local function isBuzyStage(stage)
 	if stage:GetAttribute("ActiveGame") then return true end
-
+	
 	for i, v in stage.Nodes:GetChildren() do
 		if v:FindFirstChildOfClass("Attachment") then
 			return true
 		end
 	end
-
+	
 	return false
 end
 
@@ -39,7 +44,7 @@ spawn(function()
 				Visible = not isBuzyStage(v)
 			}, "Inactive Stages")
 		end
-
+		
 		window.DisableBlurBackground = a == 1
 	end
 end)
@@ -67,7 +72,7 @@ autoplay:AddToggle("C", {
 	end
 })
 
-autoplay:AddToggle("S", {
+local svd = autoplay:AddToggle("S", {
 	Text = "Enable SV Detection",
 	Value = -- lib.SVEnabled,
 		false,
@@ -78,7 +83,7 @@ autoplay:AddToggle("S", {
 	end
 })
 
-autoplay:AddSlider("O", {
+local hos = autoplay:AddSlider("O", {
 	Text = "Hitbox Offset",
 	Min = -1000,
 	Max = 1000,
@@ -331,12 +336,14 @@ local useLegacy = autoplay:AddCheckBox({
 re = function()
 	legacy.Visible = useLegacy.Value
 	autoplaySettings.Visible = not useLegacy.Value
-
+	
+	svd.Visible = not lib.FrameworkConnected
+	
 	if useLegacy.Value then
 		for i, v in legacyChances do
 			lib.Chances[i] = v.Value
 		end
-
+		
 		lib.KPS.Global = kps.Value
 		lib.KPS.PerKey = kpspk.Value
 		lib.HoldDuration.Value = hd.Value / 1000
@@ -346,25 +353,25 @@ re = function()
 		local val = skill.Value
 		local legit = le.Value
 		local kps = lib.Display.KPS
-
+		
 		local lkps = lkps.Value
 		local maxLegitKPS = lkps >= 3 and lkps <= 18 and clamp(lkps, 4, 17) or 1 / 0
-
+		
 		local div = val <= 50 and val / 50 or kps > (maxLegitKPS - 2) and legit and lerp((val - 50) / 50, 0, round((kps - (maxLegitKPS - 2)) / 25)) or (val - 50) / 50
-
+		
 		for i, v in (val <= 50 and {
 			Sick = lerp(50, 90, div),
 			Good = lerp(50, 60, div),
 			Ok = lerp(40, 25, div),
 			Bad = lerp(30, 5, div),
 			Miss = lerp(20, 1, div)
-			} or {
-				Sick = lerp(90, 100, div),
-				Good = lerp(60, 0, div),
-				Ok = lerp(25, 0, div),
-				Bad = lerp(5, 0, div),
-				Miss = lerp(1, 0, div)
-			}) do
+		} or {
+			Sick = lerp(90, 100, div),
+			Good = lerp(60, 0, div),
+			Ok = lerp(25, 0, div),
+			Bad = lerp(5, 0, div),
+			Miss = lerp(1, 0, div)
+		}) do
 			lib.Chances[i] = v
 		end
 
