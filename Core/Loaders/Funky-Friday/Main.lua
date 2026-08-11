@@ -11,8 +11,6 @@ esp:InitClass("Inactive Stages", { Color = Color3.fromRGB(85, 170, 127) })
 
 window = window(cons, ...)
 
-if true then return end
-
 local function isBuzyStage(stage)
 	if stage:GetAttribute("ActiveGame") then return true end
 	
