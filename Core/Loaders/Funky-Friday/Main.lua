@@ -33,7 +33,7 @@ local min = math.min
 local clamp = math.clamp
 
 spawn(function()
-	while wait() do
+	while wait(0.1) do
 		local a = 0
 		for i, v in stages:GetChildren() do
 			a += 1
