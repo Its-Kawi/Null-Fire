@@ -1,5 +1,8 @@
 local cons = { }
-local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or game:HttpGet(string.char(104, 116, 116, 112, 115, 58, 47, 47, 114, 97, 119, 46, 103, 105, 116, 104, 117, 98, 117, 115, 101, 114, 99, 111, 110, 116, 101, 110, 116, 46, 99, 111, 109, 47, 78, 117, 108, 108, 45, 67, 104, 101, 114, 114, 121, 47, 85, 116, 105, 108, 105, 116, 105, 101, 115, 47, 114, 101, 102, 115, 47, 104, 101, 97, 100, 115, 47, 109, 97, 105, 110, 47, 85, 116, 105, 108, 105, 116, 121, 47, 77, 97, 105, 110, 46, 108, 117, 97)))() end)()
+
+local GITHUB = "https://raw.githubusercontent.com/Its-Kawi/"
+local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local url = GITHUB .. "Utilities/refs/heads/main/Utility/Main.lua" local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or getfenv().request and getfenv().request({ Url = url, Method = "GET" }).Body or game:HttpGet(url))() end)()
+
 local window = util:NullFireWindow()
 local esp = util:ESP()
 local fire = util:Fire()
@@ -30,7 +33,7 @@ local values = {
 		Debug = false,
 		DebugObjects = false
 	},
-	
+
 	Debug = {
 		ShowPipePuzzle = false
 	},
@@ -61,7 +64,7 @@ local values = {
 		InstantHide = false,
 
 		PullSwitches = false,
-		
+
 		SolvePipePuzzle = false,
 		PlaySolvedSolution = false
 	},
@@ -108,7 +111,7 @@ local values = {
 		Pipsqueak = false,
 		Bottomfeeder = false,
 		LockerClaustrophobia = false,
-		
+
 		Damage = false,
 		ADs = false
 	}
@@ -143,7 +146,7 @@ local hooks = { }
 if hookfunc and hookmeta and namecall and not isLuaVM then
 	local test = function() return false end
 	local old = hookfunc(test, function() return true end)
-	
+
 	hooksEnabled = test() == true and old() == false
 end
 
@@ -152,12 +155,12 @@ if hooksEnabled then
 		local old; old = hookfunc(a, function(...) return b(old, ...) end)
 		hooks[a] = old
 	end
-	
+
 	hookmetamethod = function(a, b)
 		local old;
 		local fc = function(self, ...) return b(self, old, ...) end
 		old = hookmeta(game, a, fc)
-		
+
 		hooks[fc] = old
 	end
 else
@@ -201,18 +204,18 @@ hookmetamethod("__namecall", function(self, old, ...)
 
 	local ncm = namecallMethods[self.ClassName]
 	if not ncm then return old(self, ...) end
-	
+
 	local rh = remoteHooks[self.Name]
 	if not rh or not values.Anti[rh[1]] then return old(self, ...) end
-	
+
 	local method = namecall()
 	method = method:sub(1, 1):upper() .. method:sub(2)
-	
+
 	if method ~= ncm then return old(self, ...) end
 	if method == "InvokeServer" then
 		wait(ping / 4)
 	end
-	
+
 	return rh[2](...)
 end)
 
@@ -299,7 +302,8 @@ end
 local roomNum = -1
 
 local endingRoomNames = {
-	["ModifierEnding"] = true
+	["ModifierEnding"] = true,
+	["SearchlightsEnding"] = true
 }
 
 local code = nil
@@ -310,10 +314,6 @@ cons[#cons + 1] = roomsFolder.ChildAdded:Connect(function(room)
 end)
 
 window = window(cons, ...)
-spawn(function()
-	window:Notification({ Title = "Beta", Text = "Warning: That script is in active development! More functions are coming soon!", Duration = 30, HasButtons = true })
-end)
-			
 local anti = window:AddTab("B", { Text = "Bypasses", Icon = "l://shield" })
 local antiL = anti:AddLeftGroupbox("R", { Text = "Regular Monsters" })
 local gmFuncs = { }
@@ -455,7 +455,7 @@ anti:AddButton({
 				v:Set(true)
 			end
 		end
-		
+
 		window:Notification({ Title = "God Mode", Text = "Needed functions for immortality have been enabled!\nEnjoy being untouchable!" })
 	end
 })
@@ -492,10 +492,10 @@ end })
 
 hiding:AddToggle("3", { Text = "Use Lockers for Auto Hide", Value = false, Callback = function(val)
 	values.Other.UseLockers = val
-end, Visible = false })
+end })
 hiding:AddToggle("4", { Text = "Teleport to Lockers", Value = false, Callback = function(val)
 	values.Other.TeleportToLocker = val
-end, Visible = false })
+end })
 
 local looting = automation:AddRightGroupbox("L", { Text = "Interactions" })
 looting:AddToggle("1", { Text = "Auto Loot", Value = false, Callback = function(val)
@@ -825,7 +825,7 @@ local getDoor; getDoor = function(obj)
 	if door and door:IsA("Model") then
 		return door, root
 	end
-	
+
 	return root, root
 end
 
@@ -945,7 +945,7 @@ cons[#cons + 1] = monsterSpawned:Connect(function(monster, type)
 							v.Color = ocol
 						end
 					end
-					
+
 					return
 				end
 
@@ -1210,7 +1210,7 @@ local function getName(model, type)
 	elseif n == "petbunny" then
 		return "Bunny"
 	elseif n:match("sprint") then
-		return "Adrenaline"
+		return "Spr-INT"
 	elseif n:match("neostyk") then
 		return "NeoStyk"
 	elseif n == "model" then
@@ -1350,7 +1350,7 @@ local mainLoop do
 					end
 				end
 			end
-			
+
 			local effect = camera:FindFirstChild("EyefestationCameraEffect")
 			if effect then
 				effect:Destroy()
@@ -1664,17 +1664,17 @@ end
 spawn(function()
 	local currentPuzzle, r
 	local active = pipes.ActivePuzzles
-	
+
 	while wait() and not window.Closed do
 		pipes.ShowDebugUI = values.Debug.ShowPipePuzzle
-		
+
 		if #active > 0 and values.Automation.SolvePipePuzzle then
 			if currentPuzzle ~= active[1] or not r then
 				wait(1)
-				
+
 				currentPuzzle = active[1]
 				r = pipes:Solve(currentPuzzle)
-				
+
 				if values.Automation.PlaySolvedSolution then
 					pipes:Play(r)
 				end
@@ -1714,7 +1714,7 @@ local rotations = {
 	["Battery"] = -0.6,
 	["Defibrillater"] = 1.3,
 	["Bunny"] = 2,
-	["Adrenaline"] = -0.85,
+	["Spr-INT"] = -0.85,
 	["Neostyk"] = 1,
 	["Health Boost"] = 2,
 	["The Gun"] = -2
@@ -1765,10 +1765,10 @@ spawn(function()
 	end
 end)
 
-local function onInstance(v, alreadyExisted)
-	local c, n = v.ClassName, v.Name
+local function onInstance(v : Instance, alreadyExisted)
+	local c : string, n : string = v.ClassName, v.Name
 	local p = v.Parent
-	local pc, pn = p and p.ClassName or "", p and p.Name or ""
+	local pc : string, pn : string = p and p.ClassName or "", p and p.Name or ""
 
 	if c == "Model" then
 		if pn == "Entrances" then -- door
@@ -1804,7 +1804,7 @@ local function onInstance(v, alreadyExisted)
 			}, "Fake Object")
 
 			insert(bannedInstances, { v:WaitForChild("ProximityPrompt", 9e9), "MonsterLocker" })
-		elseif n == "DiVine" then
+		elseif n == "DiVine" then -- DiVine
 			esp.new(v, {
 				Text = "DiVine",
 				RotationLevel = 1.5,
@@ -1813,17 +1813,17 @@ local function onInstance(v, alreadyExisted)
 			insert(bannedInstances, { v, "DiVine" })
 		elseif n == "DiVineRoot" then
 			wait(ping + 0.1)
-			if v:FindFirstChild("DwellerModel") then
+			if v:FindFirstChild("DwellerModel") then -- Wall Dweller
 				monsterSpawned:Fire(v, "Wall Dweller")
 				esp.new(v, {
 					Text = "Wall Dweller"
 				}, "Monster")
 
 				insert(tables.Dwellers, v:WaitForChild("Events", 9e9):WaitForChild("RemoteEvent", 9e9))
-			else
+			else -- DiVine
 				insert(bannedInstances, { v, "DiVine" })
 			end
-		elseif n == "NoGood" and p == workspace or n == "Coagulate" and p == camera then
+		elseif n == "NoGood" and p == workspace or n == "Coagulate" and p == camera then -- NoGood / Coagulate
 			wait(wait())
 			if values.Anti[n] then
 				v:Destroy()
@@ -1908,7 +1908,7 @@ local function onInstance(v, alreadyExisted)
 			insert(bannedInstances, { p.Parent:WaitForChild("DesiredLocation", 9e9), "Turret" })
 		end
 	elseif c == "ProximityPrompt" then
-		if v.Enabled and pn == "ProxyPart" and p.Parent.ClassName == "Model" then
+		if pn == "ProxyPart" and p.Parent.ClassName == "Model" then
 			local model = p.Parent
 			local name = model.Name
 			local nl = name:lower()
