@@ -109,7 +109,9 @@ if global[key] then
 	return global[key]
 end
 
-local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or game:HttpGet(string.char(104, 116, 116, 112, 115, 58, 47, 47, 114, 97, 119, 46, 103, 105, 116, 104, 117, 98, 117, 115, 101, 114, 99, 111, 110, 116, 101, 110, 116, 46, 99, 111, 109, 47, 78, 117, 108, 108, 45, 67, 104, 101, 114, 114, 121, 47, 85, 116, 105, 108, 105, 116, 105, 101, 115, 47, 114, 101, 102, 115, 47, 104, 101, 97, 100, 115, 47, 109, 97, 105, 110, 47, 85, 116, 105, 108, 105, 116, 121, 47, 77, 97, 105, 110, 46, 108, 117, 97)))() end)()
+local GITHUB = "https://raw.githubusercontent.com/Its-Kawi/"
+local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local url = GITHUB .. "Utilities/refs/heads/main/Utility/Main.lua" local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or getfenv().request and getfenv().request({ Url = url, Method = "GET" }).Body or game:HttpGet(url))() end)()
+
 warn(key, "READY")
 
 if global[key] then
@@ -158,6 +160,8 @@ local v2 = vector.create
 local round = math.round
 local clamp = math.clamp
 local run_on_actor = getfenv().run_on_actor
+
+local display = settings.Display
 
 local function clone(a)
 	local b = { }
@@ -217,24 +221,24 @@ spawn(function()
 				while true do
 					if l1:sub(endBracket, endBracket) == "(" then
 						rate = tonumber(l1:sub(endBracket + 1, -3))
-						settings.Display.Rate = rate
+						display.Rate = rate
 						break
 					end
 
 					endBracket -= 1
 					if -endBracket > #l1 then
-						settings.Display.Rate = 1
+						display.Rate = 1
 						break
 					end
 				end
 			else
-				settings.Display.Rate = 1
+				display.Rate = 1
 			end
 
 			local difficultyStart = l1:find("</font> (", 0, true)
 			if difficultyStart then
 				local difficultyEnd = l1:find(")", difficultyStart, true)
-				settings.Display.SongDifficulty = l1:sub(difficultyStart + 9, difficultyEnd - 1)
+				display.SongDifficulty = l1:sub(difficultyStart + 9, difficultyEnd - 1)
 			end
 
 			local colorStart = l1:find("><font color='", 0, true)
@@ -243,24 +247,24 @@ spawn(function()
 				local color = l1:sub(colorStart + 14, colorEnd - 2):gsub("\n\r\f\t\s\0 ", ""):lower()
 
 				if color:sub(1, 3) == "rgb" then
-					settings.Display.SongNameColor = c3r(unpack(color:sub(5, -2):split(",")))
+					display.SongNameColor = c3r(unpack(color:sub(5, -2):split(",")))
 				elseif color:sub(1, 1) == "#" then
-					settings.Display.SongNameColor = c3h(color:sub(2, -1))
+					display.SongNameColor = c3h(color:sub(2, -1))
 				end
 			end
 
-			settings.Display.SongName = l1:sub((l1:find(")'>", 0, true)) + 3, (l1:find("</f", 0, true)) - 1)
+			display.SongName = l1:sub((l1:find(")'>", 0, true)) + 3, (l1:find("</f", 0, true)) - 1)
 
 			local s, r = pcall(decodeTime, l3:sub(1, -10))
-			settings.Display.TimeLeft = s and r or 0
-			settings.TimeLeft = settings.Display.TimeLeft
-			settings.Display.SongDuration = max(settings.Display.TimeLeft, settings.Display["Song" .. "Duration"], 0) -- suspend studio warning
-			settings.Display.SongRealDuration = round(settings.Display.SongDuration * settings.Display.Rate)
-			settings.SongRealDuration = settings.Display.SongRealDuration
+			display.TimeLeft = s and r or 0
+			settings.TimeLeft = display.TimeLeft
+			display.SongDuration = max(display.TimeLeft, display["Song" .. "Duration"], 0) -- suspend studio warning
+			display.SongRealDuration = round(display.SongDuration * display.Rate)
+			settings.SongRealDuration = display.SongRealDuration
 
-			timePassed = round((settings.Display.SongDuration - settings.Display.TimeLeft) * settings.Display.Rate)
-			settings.Display.TimePassed = timePassed
-			settings.TimePassed = settings.Display.TimePassed
+			timePassed = round((display.SongDuration - display.TimeLeft) * display.Rate)
+			display.TimePassed = timePassed
+			settings.TimePassed = display.TimePassed
 		end
 	end)
 end)
@@ -269,27 +273,45 @@ local actions
 if run_on_actor then
 	spawn(function()
 		local test = {
-			[0] = false, -- READY
-			false, -- SV Enabled
-			false -- Is SV
+			[0] = false, -- COMMs READY
+			[1] = false, -- SV Enabled
+			[2] = false, -- Is SV
+			[3] = 0, -- hitbox offset
+			[4] = false, -- scroll speed changed?
 		}
 		
 		spawn(run_on_actor, plr:WaitForChild("PlayerScripts"):WaitForChild("ClientActor"), [==[
 local c = ...
-local framework = getrenv()._G.Client
-
+local renv = getrenv and getrenv()
 local wait = task.wait
 
-if framework then
-	c[0] = true
-	repeat wait() until c[0] ~= true
-	
-	print("FRAMEWORK COMMUNICATION IS READY")
-else
-	return warn("FRAMEWORK NOT FOUND")
+local function loadFail(reason)
+	return warn("FRAMEWORK NOT FOUND" .. (reason and ": " .. reason or ""))
 end
 
-while wait(0.1) do
+if not renv then return loadFail("getrenv is missing in your executor environment") end
+
+local _G = renv._G
+local framework = _G.Client
+while not framework do
+	framework = _G.Client
+	wait(0.01)
+end
+
+c[0] = true
+repeat wait(0.01) until c[0] ~= true
+	
+print("FRAMEWORK COMMUNICATION IS READY")
+
+local settings = framework.SettingsHandler.Settings
+local oldSS = settings.ScrollSpeed
+
+while wait(0.01) do
+	local ss = settings.ScrollSpeed
+	c[3] = settings.HitboxOffset
+	c[4] = c[4] or ss ~= oldSS
+	oldSS = ss
+
 	local myField = framework.VSRG.GameHandler.Field
 	if myField then
 		c[1] = myField.SVCharts or false
@@ -374,19 +396,17 @@ local KPS = 0
 local lastKeyHit = 0
 
 local function appendKPS(lane)
-	local d = settings.Display
-
 	lastKeyHit = tick()
 
 	KPS += 1
 	perLaneKPS[lane] = (perLaneKPS[lane] or 0) + 1
-	d.KPS = KPS
+	display.KPS = KPS
 
 	wait(1)
 
 	KPS -= 1
 	perLaneKPS[lane] -= 1
-	d.KPS = KPS
+	display.KPS = KPS
 end
 
 local function hitLane(laneIndex, duration)
@@ -533,54 +553,61 @@ local boolIdx = {
 }
 
 local total = 0
-local renderStack = {
-	[boolIdx[true]] = { },
-	[boolIdx[false]] = { }
+local sperf = settings.Performance
+local notesperf = sperf.Notes
+local renderQueue = {
+	[true] = { }, -- mine
+	[false] = { } -- enemy
 }
 
-local function flushRenderStackLevel(stack, category, isMine, perf)
-	local shouldRender = round(perf <= 0 and inf or (perf >= 9 and not isMine or perf >= 10 and isMine) and 0 or (1000 / globalScrollSpeed) / min(perf, 8))
-	local rendered = 0
+local alreadyRendered = {
+	[true] = 0,
+	[false] = 0
+}
 
-	category.NotesRendered = #stack
-	category.NotesVisible = shouldRender
-
-	for _, v in stack do
-		local vis = rendered < shouldRender
-		v.Visible = vis
-		rendered += vis and 1 or 0
-
-		if not vis then
-			break
-		end
-	end
-
-	return rendered
+local function calcRender(isMine)
+	return round(notesperf <= 0 and inf or (notesperf >= 9 and not isMine or notesperf >= 10 and isMine) and 0 or (1000 / globalScrollSpeed) / min(notesperf, 8))
 end
 
-local notesperf = settings.Performance.Notes
-local function flushRenderStack()
-	local display = settings.Display
-	local lanes = display.Lanes
-	local i = 0
-
-	for catName, stack in renderStack do
-		i += flushRenderStackLevel(stack, lanes[catName], catName == boolIdx[true], notesperf)
+local dlanes = display.Lanes
+local function flushRenderQueue(queue, isMine)
+	local maxRendersAllowed = calcRender(isMine)
+	local canRender = maxRendersAllowed - alreadyRendered[isMine]
+	
+	for i = min(canRender, #queue), 1, -1 do
+		local note = remove(queue, i)
+		note.Visible = true
+			
+		alreadyRendered[isMine] += 1
 	end
-
-	display.NotesVisible = i
+	
+	dlanes[boolIdx[isMine]].NotesVisible = alreadyRendered[isMine]
+	display.NotesVisible = dlanes[boolIdx[true]].NotesVisible + dlanes[boolIdx[false]].NotesVisible
 end
 
-noteAdded:Connect(function()
-	if notesperf > 0 then
-		flushRenderStack()
-	end
+noteAdded:Connect(function(note)
+	local isMine = note.IsMine
+	local queue = renderQueue[isMine]
+	local note = note.Note
+	local maxRendersAllowed = calcRender(isMine)
+	
+	note.Visible = notesperf <= 0
+	insert(queue, note)
+	flushRenderQueue(queue, isMine)
 end)
 
-noteRemoved:Connect(function()
-	if notesperf > 0 then
-		flushRenderStack()
+noteRemoved:Connect(function(note)
+	local isMine = note.IsMine
+	local queue = renderQueue[isMine]
+	
+	local found = find(queue, note.Note)
+	if found then
+		remove(queue, found)
+	else
+		alreadyRendered[isMine] -= 1
 	end
+	
+	flushRenderQueue(queue, isMine)
 end)
 
 local dataIndex = {
@@ -622,12 +649,11 @@ local function onNote(note, data, sharedData, isNew, isMine)
 		toInsert = data.BadNotes
 	end
 
-	local display = settings.Display
-
 	local catName = boolIdx[isMine]
-	local cat = display.Lanes[catName]
+	local cat = dlanes[catName]
 	local rolled = rollChance()
 
+	local destroying = event.new()
 	local noteData = {
 		Note = note,
 		Rolled = rolled,
@@ -640,7 +666,7 @@ local function onNote(note, data, sharedData, isNew, isMine)
 		Lane = data,
 		LaneIndex = data.LaneIndex,
 		Destroyed = false,
-		Destroying = event.new(),
+		Destroying = destroying,
 		DisplayCategory = cat,
 		CategoryName = catName
 	}
@@ -654,11 +680,7 @@ local function onNote(note, data, sharedData, isNew, isMine)
 	display.NotesRendered += 1
 	rendered += 1
 
-	local rstack = renderStack[catName]
-	rstack[#rstack + 1] = note
-	note.Visible = notesperf <= 0
-
-	noteAdded:Fire(noteData)
+	defer(noteAdded.Fire, noteAdded, noteData)
 
 	toInsert[#toInsert + 1] = noteData
 	if isNew then
@@ -669,24 +691,21 @@ local function onNote(note, data, sharedData, isNew, isMine)
 		end
 	end
 
-	note:GetPropertyChangedSignal("Parent"):Wait()
+	while note.Parent do
+		note:GetPropertyChangedSignal("Parent"):Wait()
+	end
 
 	cat.NotesRendered -= 1
 	display.NotesRendered -= 1
 	rendered -= m
 
 	noteRemoved:Fire(noteData)
-	noteData.Destroying:Fire()
+	destroying:Fire()
 	noteData.Destroyed = true
 
 	local found = find(toInsert, noteData)
 	if found then
 		remove(toInsert, found)
-	end
-
-	found = find(rstack, note)
-	if found then
-		remove(rstack, found)
 	end
 end
 
@@ -812,12 +831,6 @@ spawn(function()
 		estFps = append(fpsBuffer, fps, fps)
 		settings.FPS = estFps
 
-		local currentPerf = notesperf
-		if lastPerf ~= currentPerf or ticks % 30 == 0 and currentPerf > 0 then
-			lastPerf = currentPerf
-			flushRenderStack()
-		end
-
 		local newChances = clone(settings.Chances)
 		local onlySick = false
 
@@ -836,7 +849,7 @@ spawn(function()
 		sve = settings.SVEnabled
 		doSV = actions and actions[1] and actions[2] or not actions and isSV and sve
 		ch = newChances
-		ho = settings.HitOffset
+		ho = actions and actions[3] / 1000 or settings.HitOffset
 		spr = settings.Spray
 		notesperf = settings.Performance.Notes
 		psick = settings.PerfectSick
@@ -848,6 +861,10 @@ spawn(function()
 		kpsK, kpsG = settings.KPS.PerKey, settings.KPS.Global
 		if kpsK == 0 then kpsK = inf end
 		if kpsG == 0 then kpsG = inf end
+		
+		if not settings.Playing and actions then
+			actions[4] = false
+		end
 	end
 end)
 
@@ -871,6 +888,10 @@ local missOffset  = offsets.Miss
 local missOffset2 = offsets.Miss * 2
 local SVD = 0
 
+local function lerp(a, b, c)
+	return (a + (b - a) * c)
+end
+
 local canHit; canHit = function(note, data, far)
 	local x = UDimToVector2(data.Receptor.Position) + v2(useX and 0.5 or 0, 0.5, 0)
 	local y = UDimToVector2(note.Note.Position)
@@ -878,12 +899,8 @@ local canHit; canHit = function(note, data, far)
 	local dist = getDistance(x, y) / data.ScrollSpeed
 	local behind = isBehind(data, x, y)
 
-	if behind then
-		dist += ho
-	else
-		dist -= ho
-	end
-
+	dist -= ho / lerp(1, 1.08, abs(ho))
+	
 	if dist < 0 then
 		dist = -dist
 		behind = not behind
@@ -1031,10 +1048,6 @@ local function hitNote(note, data, dist, sick, force)
 	end
 end
 
-local function lerp(a, b, c)
-	return (a + (b - a) * c)
-end
-
 function playLane(lane)
 	local notes = lane.Notes
 	local toRemove = { }
@@ -1093,7 +1106,7 @@ local function processLane(lane, sharedData, doAutoPlay)
 		spawn(mcdf)
 		if modChartDetectBuffer > estFps * 10 then
 			modChart = true
-			settings.Display.IsModChart = true
+			display.IsModChart = true
 		end
 	end
 
@@ -1122,18 +1135,17 @@ end
 
 local function SVDTC(first)
 	local mySongId = songId
-	local d = settings.Display
-
+	
 	SVD += 1
 
 	isSV = SVD >= 4
-	d.IsSV = d.IsSV or isSV
+	display.IsSV = display.IsSV or isSV
 
 	wait((first and 50 or 30) / rate)
 
 	if songId == mySongId then
 		SVD -= 1
-		d.IsSV = isSV
+		display.IsSV = isSV
 	end
 end
 
@@ -1204,7 +1216,7 @@ local function statsAdded(stats, cons)
 		local hs = settings.MoreStats
 		if hs then
 			rows:Title(typeof(hs) == "string" and hs or false)
-			rows:Rendered(settings.Display.NotesRendered == settings.Display.NotesVisible and settings.Display.NotesRendered or "Rendered: " .. settings.Display.NotesVisible .. " (" .. settings.Display.NotesRendered .. ")")
+			rows:Rendered(display.NotesRendered == display.NotesVisible and display.NotesRendered or "Rendered: " .. display.NotesVisible .. " (" .. display.NotesRendered .. ")")
 			rows:TotalNotes(total)
 			rows:AutoplayKPS(KPS)
 			rows:FPS("FPS: <font color=\"#" .. (estFps < 60 and c3n(1):Lerp(c3n(0, 1), estFps / 60) or estFps < 120 and c3n(0, 1):Lerp(c3n(1, 0, 1), (estFps - 60) / 60) or estFps < 240 and c3n(1, 0, 1):Lerp(c3n(0.33, 0, 1), (estFps - 120) / 120) or c3n(0.6, 0.2, 1)):ToHex() .. "\">" .. ("%.1f"):format(estFps) .. "</font>")
@@ -1244,17 +1256,17 @@ local function resetState(sharedData)
 	modChart = false
 	total = 0
 
-	for _, lane in settings.Display.Lanes do
+	for _, lane in display.Lanes do
 		for i in lane do
 			lane[i] = 0
 		end
 	end
 
-	settings.Display.TotalNotes = 0
-	settings.Display.NotesRendered = 0
-	settings.Display.NotesVisible = 0
-	settings.Display.IsModChart = false
-	settings.Display.IsSV = false
+	display.TotalNotes = 0
+	display.NotesRendered = 0
+	display.NotesVisible = 0
+	display.IsModChart = false
+	display.IsSV = false
 
 	set3d(true)
 	black.Visible = false
@@ -1302,15 +1314,15 @@ songStarted:Connect(function(sharedData)
 		local gauge = hud:FindFirstChild("AccuracyGauge")
 		if gauge then
 			if can3d then
-				set3d(not settings.Performance.Disable3D)
-				black.Visible = settings.Performance.Disable3D
+				set3d(not sperf.Disable3D)
+				black.Visible = sperf.Disable3D
 			end
 
-			hud.Visible = settings.Performance.UI < 3
-			hud.AccuracyGauge.Visible = settings.Performance.UI < 1
+			hud.Visible = sperf.UI < 3
+			hud.AccuracyGauge.Visible = sperf.UI < 1
 
 			for i, v in indicators do
-				v.Parent = settings.Performance.UI < 2 and hud or nil
+				v.Parent = sperf.UI < 2 and hud or nil
 			end
 		end
 	end
@@ -1375,6 +1387,21 @@ local function onWindow(window)
 	songStarted:Fire(sharedData)
 
 	while window.Parent do
+		local needsFlush = false
+		if actions and actions[4] then
+			actions[4] = false
+			needsFlush = true
+			
+			for _, field in sharedData.Fields do
+				for _, lane in field.Lanes do
+					lane.ScrollSpeed = 0
+					lane.ScrollSpeedBuffer = { }
+					globalScrollSpeed = 0
+					globalScrollSpeedBuffer = { }
+				end
+			end
+		end
+		
 		local myField = sharedData.Fields[side]
 		local oppositeField = sharedData.Fields[side == "Left" and "Right" or "Left"]
 
@@ -1411,6 +1438,12 @@ local function onWindow(window)
 
 		while finishes ~= need do
 			fe:Wait()
+		end
+		
+		if needsFlush then
+			for i, v in renderQueue do
+				flushRenderQueue(v, i)
+			end
 		end
 	end
 
