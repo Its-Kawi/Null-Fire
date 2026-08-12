@@ -7,7 +7,9 @@ if global[key] then
 	return global[key]
 end
 
-local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or game:HttpGet(string.char(104, 116, 116, 112, 115, 58, 47, 47, 114, 97, 119, 46, 103, 105, 116, 104, 117, 98, 117, 115, 101, 114, 99, 111, 110, 116, 101, 110, 116, 46, 99, 111, 109, 47, 78, 117, 108, 108, 45, 67, 104, 101, 114, 114, 121, 47, 85, 116, 105, 108, 105, 116, 105, 101, 115, 47, 114, 101, 102, 115, 47, 104, 101, 97, 100, 115, 47, 109, 97, 105, 110, 47, 85, 116, 105, 108, 105, 116, 121, 47, 77, 97, 105, 110, 46, 108, 117, 97)))() end)()
+local GITHUB = "https://raw.githubusercontent.com/Its-Kawi/"
+local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local url = GITHUB .. "Utilities/refs/heads/main/Utility/Main.lua" local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or getfenv().request and getfenv().request({ Url = url, Method = "GET" }).Body or game:HttpGet(url))() end)()
+
 local event = util:Event()
 local fpp = util:Fire().fireproximityprompt
 
@@ -15,8 +17,7 @@ if global[key] then
 	return global[key]
 end
 
-local plr = game:GetService("Players").LocalPlayer
-local container = game:GetService("RunService"):IsStudio() and game:GetService("StarterGui") or plr:WaitForChild("PlayerGui")
+local container = game:GetService("RunService"):IsStudio() and game:GetService("StarterGui") or game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
 local v2 = Vector2.new
 local name = "TubeGameDebugOutput"
 if container:FindFirstChild(name) then
@@ -129,6 +130,9 @@ local activePuzzles = { }
 local tubeGameRoom, currentRoom, nextRoom
 local function onDesc(v)
 	if v.Name == "puzzle" then
+		puzzleAdded:Fire(v.Parent)
+		activePuzzles[#activePuzzles + 1] = v.Parent
+
 		local room = v.Parent:FindFirstAncestorOfClass("Model")
 		while true do
 			if room.Parent.Name ~= "Rooms" then
@@ -144,11 +148,6 @@ local function onDesc(v)
 		end
 
 		tubeGameRoom = room
-					
-		wait(plr:GetNetworkPing() + 0.5) -- prevents bugs when it detects tube minigame too early, causing it to look/act bad
-		
-		puzzleAdded:Fire(v.Parent)
-		activePuzzles[#activePuzzles + 1] = v.Parent
 	end
 end
 
@@ -361,10 +360,10 @@ local solverId = 0
 
 local function trySolvePuzzle(currentTubeGame)
 	if isBuzy then return end
-	
+
 	isBuzy = true
 	solverId += 1
-	
+
 	local currentSolverId = solverId
 	local children = currentTubeGame.puzzle:GetChildren()
 
@@ -465,17 +464,6 @@ local function trySolvePuzzle(currentTubeGame)
 		return rotationMap[v2ts(rOuts[1])] or 1
 	end
 
-	do
-		local v = currentTubeGame:WaitForChild("Power")
-		local pos = getPositionInGrid(v:GetPivot().Position)
-		local obj = { v, pos, "Start", getTubeVariant(v) }
-
-		grid[pos] = obj
-		gridReverse[obj] = pos
-
-		wait(plr:GetNetworkPing() + 0.05)
-	end
-
 	for i, v in children do
 		local pos = getPositionInGrid(v:GetPivot().Position)
 		local obj = { v, pos, "Tube", getTubeVariant(v) }
@@ -491,6 +479,13 @@ local function trySolvePuzzle(currentTubeGame)
 		grid[pos] = obj
 		gridReverse[obj] = pos
 	end
+
+	local v = currentTubeGame.Power
+	local pos = getPositionInGrid(v:GetPivot().Position)
+	local obj = { v, pos, "Start", getTubeVariant(v) }
+
+	grid[pos] = obj
+	gridReverse[obj] = pos
 
 	virtualGrid = { }
 
@@ -526,7 +521,7 @@ local function trySolvePuzzle(currentTubeGame)
 	local currentlyAt
 	local highlighted
 	local spritesGrid = { }
-	
+
 	local lastTick = tick()
 	local allowedTime = 0.001
 	local calcStartTick = lastTick
@@ -551,7 +546,7 @@ local function trySolvePuzzle(currentTubeGame)
 		while gui:IsDescendantOf(game) and currentTubeGame:IsDescendantOf(workspace) and find(activePuzzles, currentTubeGame) and solverId == currentSolverId do
 			local e = lib and lib.ShowDebugUI or false
 			gui.Enabled = e
-			allowedTime = lib and 1 / (lerp(lib.StartFPS, lib.EndFPS, clamp((tick() + lib.FPSDowngradeDuration - calcStartTick) / lib.FPSDowngradeDuration, 0, 1))) or 0.001
+			allowedTime = lib and 1 / (lerp(lib.StartFPS, lib.EndFPS, clamp((tick() - calcStartTick) / lib.FPSDowngradeDuration, 0, 1))) or 0.001
 
 			if e then
 				for _, obj in currentVirtualGrid do
@@ -569,7 +564,7 @@ local function trySolvePuzzle(currentTubeGame)
 					local prevRot = prevRotations[obj.pos]
 					if prevRot ~= rot then
 						prevRotations[obj.pos] = rot
-						
+
 						if allowedTime > 0.04 then
 							ts:Create(sprite, TweenInfo.new(0.1), { Rotation = (rot - 1) * 90 }):Play()
 						else
@@ -590,8 +585,6 @@ local function trySolvePuzzle(currentTubeGame)
 	local succeedCV
 
 	local getPaths; getPaths = function(tube, previous, first, ignore, isFirst)
-		if not tube then return nil, false, false end
-		
 		local reachedStart = false
 		local isFinalPath = false
 
@@ -648,15 +641,20 @@ local function trySolvePuzzle(currentTubeGame)
 					ignore[val.pos] = true
 
 					local paths, rs, isFinal = getPaths(val, copy, first, ignore, false)
-					if paths then
-						isFinalPath = isFinalPath or isFinal
-						tbl = { i, val.Position, paths }
+					isFinalPath = isFinalPath or isFinal
+					tbl = { i, val.Position, paths }
 
-						if isFinalPath then
-							succeedCV = succeedCV or cloneVirtualGrid(currentVirtualGrid)
-							break
-						end
+					if isFinalPath then
+						succeedCV = succeedCV or cloneVirtualGrid(currentVirtualGrid)
 					end
+
+					local t = tick()
+					if t - lastTick > allowedTime then
+						wait()
+						lastTick = tick()
+					end
+
+					if isFinalPath then break end
 				end
 
 				if tbl then
@@ -697,7 +695,7 @@ local function trySolvePuzzle(currentTubeGame)
 			break
 		end
 	end
-	
+
 	local fakeGrid = { }
 	for i, v in originalVirtualGrid do
 		fakeGrid[v2ts(v.Position)] = v.Copy
@@ -721,12 +719,12 @@ local function trySolvePuzzle(currentTubeGame)
 		for i, v in currentVirtualGrid do
 			tempGrid[v2ts(v.Position)] = v.Copy
 		end
-		
+
 		local val = v2ts(start.Position)
 		if not find(route, val) then
 			route[#route + 1] = val
 		end
-		
+
 		vRotMap = { }
 		for i, v in route do
 			local obj = tempGrid[v]
@@ -749,13 +747,14 @@ local function solvePuzzle(puzzle)
 	return rotations, grid, tick() - start
 end
 
+local plr = game:GetService("Players").LocalPlayer
 lib = {
 	StartFPS = 144, -- less fps = faster calculate
 	EndFPS = 0.5,
 	FPSDowngradeDuration = 10,
-	
+
 	ShowDebugUI = false,
-	
+
 	Solve = function(self, puzzle)
 		return { solvePuzzle(puzzle) }
 	end,
@@ -771,28 +770,28 @@ lib = {
 			puzzle = obj.Instance:FindFirstAncestorOfClass("Folder").Parent
 			break
 		end
-		
+
 		warn()
-		
+
 		local solution = { }
 		for pos, targetRot in rotations do
 			pos = v2ts(pos)
 			local obj = grid[pos]
-			
+
 			local myRot = obj.Rotation
 			local neededRotations = 0
-			
+
 			if obj.Variant == "Straight" then
 				myRot = (myRot - 1) % 2 + 1
 				targetRot = (targetRot - 1) % 2 + 1
-				
+
 				if myRot ~= targetRot then
 					neededRotations = 1
 				end
 			elseif myRot ~= targetRot then
 				neededRotations = targetRot > myRot and targetRot - myRot or 4 - (myRot - targetRot)
 			end
-			
+
 			solution[pos] = neededRotations
 			print(pos, neededRotations, myRot, targetRot)
 		end
@@ -810,7 +809,7 @@ lib = {
 				if dist < obj.MaxActivationDistance - 1 and (not coodowns[pos] or tick() - coodowns[pos] > 0.75 + (plr:GetNetworkPing() / 2)) and solution[pos] ~= 0 then
 					coodowns[pos] = tick()
 					spawn(fpp, obj)
-					
+
 					if not cons2[obj] then
 						local sound = obj.Parent:FindFirstChildWhichIsA("Sound")
 						local con; con = sound:GetPropertyChangedSignal("Playing"):Once(function()
@@ -818,11 +817,11 @@ lib = {
 								solution[pos] -= 1
 								coodowns[pos] = tick()
 								cons2[obj] = nil
-								
+
 								con:Disconnect()
 							end
 						end)
-						
+
 						cons[2] = con
 					end
 				end
@@ -854,7 +853,7 @@ lib = {
 		for i, v in cons do
 			v:Disconnect()
 		end
-		
+
 		for i, v in cons2 do
 			v:Disconnect()
 		end
