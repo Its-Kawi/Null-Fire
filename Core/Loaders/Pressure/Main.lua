@@ -13,18 +13,6 @@ local pipes = util:PressureTubePuzzle()
 
 local fpp, fti, touch = fire.fireproximityprompt, fire.firetouchinterest, fire.touchpart
 
-esp:InitClass("Keycard", { Color = Color3.fromRGB(170, 170, 255) })
-esp:InitClass("Item", { Color = Color3.fromRGB(255, 85, 255) })
-esp:InitClass("Currency", { Color = Color3.fromRGB(85, 255, 255) })
-esp:InitClass("Door", { Color = Color3.fromRGB(0, 170, 255) })
-esp:InitClass("Node Monster", { Color = Color3.fromRGB(255, 60, 25) })
-esp:InitClass("Monster", { Color = Color3.fromRGB(255, 100, 10) })
-esp:InitClass("Weak Monster", { Color = Color3.fromRGB(255, 101, 62) })
-esp:InitClass("Fake Object", { Color = Color3.fromRGB(116, 93, 193) })
-esp:InitClass("Hazard", { Color = Color3.fromRGB(150, 10, 40) })
-esp:InitClass("Generator", { Color = Color3.fromRGB(150, 150, 150) })
-esp:InitClass("Interactable", { Color = Color3.fromRGB(255, 170, 127) })
-
 local values = {
 	Visual = {
 		NoPopups = false,
@@ -66,7 +54,9 @@ local values = {
 		PullSwitches = false,
 
 		SolvePipePuzzle = false,
-		PlaySolvedSolution = false
+		PlaySolvedSolution = false,
+		
+		PandemoniumMinigame = false
 	},
 
 	Other = {
@@ -90,6 +80,7 @@ local values = {
 		Harbinger = false,
 		Friend = false,
 		DamageParts = false,
+		FirewallDamageParts = false,
 		Turret = false,
 		Parasites = false,
 		Fog = false,
@@ -110,7 +101,8 @@ local values = {
 		Fish = false,
 		Pipsqueak = false,
 		Bottomfeeder = false,
-		LockerClaustrophobia = false,
+		LockerClaustrophobia = false, -- TODO
+		DontDeletePande = false,
 
 		Damage = false,
 		ADs = false
@@ -130,6 +122,7 @@ local tick = tick
 local wait = task.wait
 local random, round = math.random, math.round
 local v3 = vector.create
+local pcall = pcall
 local typeof = typeof
 local env = (getfenv().getgenv or getfenv)()
 
@@ -198,9 +191,9 @@ local namecallMethods = {
 	RemoteFunction = "InvokeServer"
 }
 
-local ping = plr:GetNetworkPing()
+local ignoreNC = false
 hookmetamethod("__namecall", function(self, old, ...)
-	if self.Parent ~= eventsRFolder then return old(self, ...) end
+	if self.Parent ~= eventsRFolder or ignoreNC then return old(self, ...) end
 
 	local ncm = namecallMethods[self.ClassName]
 	if not ncm then return old(self, ...) end
@@ -212,12 +205,53 @@ hookmetamethod("__namecall", function(self, old, ...)
 	method = method:sub(1, 1):upper() .. method:sub(2)
 
 	if method ~= ncm then return old(self, ...) end
+
+	ignoreNC = false
 	if method == "InvokeServer" then
 		wait(ping / 4)
 	end
-
+	
 	return rh[2](...)
 end)
+
+local gameFramework = nil
+pcall(function()
+	local getgc = env.getgc
+	if getgc then
+		local function checkObj(v)
+			return v.Parkour and not v.PParkour and v.Toolbar and v.UI
+		end
+		
+		for i, v in getgc(true) do
+			local s, r = pcall(checkObj, v)
+			if s and r then
+				gameFramework = v
+				break
+			end
+		end
+	end
+	
+	if not gameFramework then
+		gameFramework = require(mainGui:WaitForChild("Client"):WaitForChild("MainClient"))
+	end
+end)
+
+local pack, unpack = table.pack, unpack or table.unpack
+local function fireEvent(name, ...)
+	local ev = eventsRFolder:FindFirstChild(name)
+	if not ev then return end
+
+	ignoreNC = true
+
+	local args = pack(...)	
+	if ev:IsA("RemoteEvent") or ev:IsA("UnreliableRemoteEvent") then
+		ev:FireServer(unpack(args, 1, args.n))
+	elseif ev:IsA("RemoteFunction") then
+		return ev:InvokeServer(unpack(args, 1, args.n))
+	else
+		ignoreNC = false
+	end
+end
 
 local gameSettings = { }
 for i, v in gameSettingsRFolder:GetChildren() do
@@ -307,13 +341,27 @@ local endingRoomNames = {
 }
 
 local code = nil
+
+window = window(cons, ...)
+
 cons[#cons + 1] = roomsFolder.ChildAdded:Connect(function(room)
 	previousRoom = lastRoom
 	lastRoom = (previousRoom and not endingRoomNames[previousRoom.Name] or not previousRoom) and room or previousRoom
 	code = nil
 end)
 
-window = window(cons, ...)
+esp:InitClass("Keycard", { Color = Color3.fromRGB(170, 170, 255) })
+esp:InitClass("Item", { Color = Color3.fromRGB(255, 85, 255) })
+esp:InitClass("Currency", { Color = Color3.fromRGB(85, 255, 255) })
+esp:InitClass("Door", { Color = Color3.fromRGB(0, 170, 255) })
+esp:InitClass("Node Monster", { Color = Color3.fromRGB(255, 60, 25) })
+esp:InitClass("Monster", { Color = Color3.fromRGB(255, 100, 10) })
+esp:InitClass("Weak Monster", { Color = Color3.fromRGB(255, 101, 62) })
+esp:InitClass("Fake Object", { Color = Color3.fromRGB(116, 93, 193) })
+esp:InitClass("Hazard", { Color = Color3.fromRGB(150, 10, 40) })
+esp:InitClass("Generator", { Color = Color3.fromRGB(150, 150, 150) })
+esp:InitClass("Interactable", { Color = Color3.fromRGB(255, 170, 127) })
+
 local anti = window:AddTab("B", { Text = "Bypasses", Icon = "l://shield" })
 local antiL = anti:AddLeftGroupbox("R", { Text = "Regular Monsters" })
 local gmFuncs = { }
@@ -353,12 +401,18 @@ gmFuncs[#gmFuncs + 1] = antiL:AddToggle("A", { Text = "Anti Bottomfeeder", Toolt
 end })
 
 local antiR = anti:AddRightGroupbox("N", { Text = "Node Monsters" })
+antiR:AddHeader({ Text = "Pandemonium-like Entities" })
 gmFuncs[#gmFuncs + 1] = antiR:AddToggle("1", { Text = "Anti Pandemonium", Callback = function(val)
 	values.Anti.Pandemonium = val
 end })
 gmFuncs[#gmFuncs + 1] = antiR:AddToggle("2", { Text = "Anti Harbinger", Tooltip = "Aka. Anti Death Angel", Callback = function(val)
 	values.Anti.Harbinger = val
 end })
+antiR:AddToggle("4", { Text = "Blind them instead of deleting", Callback = function(val)
+	values.Anti.DontDeletePande = val
+end })
+
+antiR:AddHeader({ Text = "Other Entities" })
 gmFuncs[#gmFuncs + 1] = antiR:AddToggle("3", { Text = "Anti Witching Hour", Tooltip = "Yay, I can play at 3 AM", Callback = function(val)
 	values.Anti.WitchingHour = val
 end })
@@ -366,6 +420,9 @@ end })
 local anti2 = anti:AddLeftGroupbox("O", { Text = "Other" })
 gmFuncs[#gmFuncs + 1] = anti2:AddToggle("1", { Text = "Anti Damaging Parts", Callback = function(val)
 	values.Anti.DamageParts = val
+end })
+gmFuncs[#gmFuncs + 1] = anti2:AddToggle("6", { Text = "Anti Firewall Damaging Parts", Tooltip = "Enabling this might cause you being stuck in FireWall, making the only solution is flying", Callback = function(val)
+	values.Anti.FirewallDamageParts = val
 end })
 gmFuncs[#gmFuncs + 1] = anti2:AddToggle("3", { Text = "Anti Turret", Callback = function(val)
 	values.Anti.Turret = val
@@ -398,6 +455,9 @@ end })
 gmFuncs[#gmFuncs + 1] = events:AddToggle("2", { Text = "Anti Hot Potato", Callback = function(val)
 	values.Anti.HotPotato = val
 end })
+events:AddToggle("3", { Text = "Locker Claustrophobia", Callback = function(val)
+	values.Anti.LockerClaustrophobia = val
+end })
 
 local modifierOnly = anti:AddRightGroupbox("M", { Text = "Modifier Only" })
 gmFuncs[#gmFuncs + 1] = modifierOnly:AddToggle("1", { Text = "Anti GOM", Callback = function(val)
@@ -412,9 +472,9 @@ end })
 gmFuncs[#gmFuncs + 1] = modifierOnly:AddToggle("4", { Text = "Anti No Good", Tooltip = "I HATE THIS GUY SO MUCH</b>", Callback = function(val)
 	values.Anti.NoGood = val
 end })
-gmFuncs[#gmFuncs + 1] = modifierOnly:AddToggle("5", { Text = "Anti Kitty Clock", Callback = function(val)
-	values.Anti.KittyClock = val
-end })
+gmFuncs[#gmFuncs + 1] = modifierOnly:AddToggle("5", { Text = "Anti Kitty Clock", Callback = function(val, self)
+	values.Anti.KittyClock = self.Visible and not self.Disabled and val
+end, Visible = false })
 gmFuncs[#gmFuncs + 1] = modifierOnly:AddToggle("6", { Text = "Anti Fish", Tooltip = "No, thats not about bottomfeeder", Callback = function(val)
 	values.Anti.Fish = val
 end })
@@ -432,8 +492,8 @@ experemental:AddToggle({
 	Tooltip = "ADs will no longer show up, but you will recieve rewards.\nThis can be used to turn into a ghost by clicking the AD button without having to watch it",
 	DisabledTooltip = "Your executor does not support that function!",
 	Disabled = not hooksEnabled,
-	Callback = function(val)
-		values.Anti.ADs = val
+	Callback = function(val, self)
+		values.Anti.ADs = self.Visible and not self.Disabled and val
 	end
 })
 
@@ -441,8 +501,8 @@ gmFuncs[#gmFuncs + 1] = experemental:AddToggle({
 	Text = "Anti Damage",
 	DisabledTooltip = "Your executor does not support that function!",
 	Disabled = not hooksEnabled,
-	Callback = function(val)
-		values.Anti.Damage = val
+	Callback = function(val, self)
+		values.Anti.Damage = self.Visible and not self.Disabled and val
 	end
 })
 
@@ -482,6 +542,10 @@ generatorInteracts:AddToggle("1", { Text = "Auto Fix Generators", Value = false,
 	values.Automation.FixGenerators = val
 end })
 
+gmFuncs[#gmFuncs + 1] = safety:AddToggle("2", { Text = "Auto Pandemonium minigame", Tooltip = "Harbinger, aka. Death Angel are included", Callback = function(val)
+	values.Automation.PandemoniumMinigame = val
+end })
+
 local hiding = automation:AddLeftGroupbox("H", { Text = "Hiding" })
 gmFuncs[#gmFuncs + 1] = hiding:AddToggle("1", { Text = "Auto Hide", Tooltip = "No, it does work. Enemies won't attack you, if you're not using the locker mode", Value = false, Callback = function(val)
 	values.Automation.Hide = val
@@ -492,12 +556,12 @@ end })
 
 hiding:AddToggle("3", { Text = "Use Lockers for Auto Hide", Value = false, Callback = function(val)
 	values.Other.UseLockers = val
-end })
+end, Visible = false })
 hiding:AddToggle("4", { Text = "Teleport to Lockers", Value = false, Callback = function(val)
 	values.Other.TeleportToLocker = val
-end })
+end, Visible = false })
 
-local looting = automation:AddRightGroupbox("L", { Text = "Interactions" })
+local looting = automation:AddRightGroupbox("L", { Text = "Functions" })
 looting:AddToggle("1", { Text = "Auto Loot", Value = false, Callback = function(val)
 	values.AutoPick.Enabled = val
 end })
@@ -528,6 +592,9 @@ end })
 looting:AddToggle("5", { Text = "Auto Play Solution", Value = false, Callback = function(val)
 	values.Automation.PlaySolvedSolution = val
 end })
+looting:AddSlider("6", { Text = "Maximum Pipe Puzzle FPS", Tooltip = "Start FPS is 120 and it glides to THAT value in 10 seconds\nThe less this value, the faster algoritm solves the puzzle", Value = pipes.EndFPS, Min = 0.1, Max = 30, Step = 0.1, --[[Format = function(self) return self:FixNum(self.Value) .. " FPS" end,]] Callback = function(val)
+	pipes.EndFPS = val
+end })
 
 local notifs = window:AddTab("N", { Text = "Notifications", Icon = "UI" })
 notifs:AddToggle("1", { Text = "Notify Monsters", Callback = function(val)
@@ -547,8 +614,8 @@ notifs:AddTextBox("5", { Text = "Chat Notification Format", PlaceholderText = va
 	values.Notify.ChatFormat = val
 end, Tooltip = "<Monster> for Monster's name (Angler)\n<monster> for lowercase Monster's name (angler)\n<MONSTER> for uppercase (ANGLER)" })
 
-local interact = window:AddTab("I", { Text = "Interactions", Icon = "list-plus" })
-local prompts = interact:AddLeftGroupbox("P", { Text = "Proximity Prompts" })
+local interact = window:AddTab("I", { Text = "Functions", Icon = "list-plus" })
+local prompts = interact:AddRightGroupbox("P", { Text = "Proximity Prompts" })
 local instant = prompts:AddToggle("I", { Text = "Instant Interact", Tooltip = "You would no longer to hold E", Value = false })
 prompts:AddToggle("D", { Text = "Better Doors", Tooltip = "Makes it easier to open doors", Value = false, Callback = function(val)
 	values.Other.BetterDoors = val
@@ -586,7 +653,7 @@ local function crouch(state)
 	end
 end
 
-local character = interact:AddRightGroupbox("C", { Text = "Character" })
+local character = interact:AddLeftGroupbox("C", { Text = "Character" })
 character:AddToggle("1", { Text = "Noclip", Callback = function(val, self)
 	if not val then return end
 
@@ -608,7 +675,47 @@ character:AddToggle("1", { Text = "Noclip", Callback = function(val, self)
 	crouch(6)
 end })
 
-local speed = character:AddSlider("2", { Text = "Speed", AllowSetValue = true, Min = 0, Max = 100, Step = 1, Value = 0, Format = "%" })
+character:AddSeparator()
+character:AddToggle("0", { Text = "Always in Parkour Mode", Callback = function(val, self)
+	local pk = gameFramework.Parkour
+
+	if val then
+		while self.Value do
+			if not pk.State or pk.CausedBySPRINT then
+				pk.Start()
+			end
+
+			wait()
+		end
+
+		if not pk.CausedBySPRINT then
+			pk.Stop()
+		end
+	end
+end, Disabled = not gameFramework, DisabledTooltip = "Your executor does not support that function!" })
+
+character:AddToggle("5", { Text = "Unlock Inventory", Callback = function(val, self)
+	while val and self.Value do
+		gameFramework.Toolbar.CanEquip = true
+		gameFramework.UI.BotFrame.ToolBar.Visible = true;
+
+		wait()
+	end
+end, Disabled = not gameFramework, DisabledTooltip = "Your executor does not support that function!" })
+
+character:AddSeparator()
+
+local speedEnabled = character:AddToggle("6", { Text = "Speed Hacks Enabled" })
+local speed = character:AddSlider("2", { Text = "Speed", AllowSetValue = true, Min = 0, Max = 100, Step = 1, Value = 0, Format = "%", Callback = function(val, self) self.Value = max(val, 0) end })
+local jump = character:AddSlider("3", { Text = "Jump Power", AllowSetValue = true, BypassSetValue = true, Min = 0, Max = 200, Step = 1, Value = 0, Format = "%", Tooltip = "<b>Only works when you have ability to jump</b>, e.g. in the Firewall Parkour Jetsuit\n<b>NOTE: This boosts ALL velocity that launches you up</b>, <b>not only jumping</b>, so be careful", Callback = function(val, self) self.Value = max(val, 0) end })
+local fall = character:AddSlider("4", { Text = "Falling Speed", AllowSetValue = true, BypassSetValue = true, Min = -75, Max = 200, Step = 1, Value = 0, Format = "%", Callback = function(val, self) self.Value = max(val, -75) end })
+
+character:AddSeparator()
+character:AddButton({ Text = "Reset Character", Tooltip = "Kills you", Callback = function()
+	if window:Notification({ Title = "Reset Character", Text = "Are you sure you wanna kill yourself?", HasButtons = true }) then
+		fireEvent("LocalDamage", 9999, nil, nil, "Lopee", nil, false)
+	end
+end })
 
 cons[#cons + 1] = game:GetService("ProximityPromptService").PromptButtonHoldBegan:Connect(function(pp)
 	if instant.Value then
@@ -619,16 +726,17 @@ end)
 
 local lastPos
 
-cons[#cons + 1] = rs.Stepped:Connect(function(_, delta)
+cons[#cons + 1] = rs.PreAnimation:Connect(function(_, delta)
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	local pos = (hrp or char):GetPivot().Position
 
-	if lastPos and hrp and hum and hum.MoveDirection.Magnitude > 0.01 then
+	if lastPos and hrp and speedEnabled.Value then
 		local vel = pos - lastPos
 		if vel.X ~= vel.X or vel.Magnitude > 2 then vel = v3(0, 0, 0) end
 
-		char:TranslateBy(v3(vel.X, vel.Y > 0 and vel.Y / 1.5 or 0, vel.Z) * (speed.Value * 5) * delta)
+		local mul = hum and hum.MoveDirection.Magnitude > 0.01 and speed.Value * 0.035 or 1
+		char:TranslateBy(v3(vel.X * mul, vel.Y > 0 and vel.Y * jump.Value / 100 or vel.Y * fall.Value / 100, vel.Z * mul))
 	end
 
 	lastPos = (hrp or char):GetPivot().Position
@@ -639,12 +747,47 @@ pcall(function()
 end)
 
 local visuals = window:AddTab("V", { Text = "Visuals", Icon = "rectangle-goggles" })
-local funny = visuals:AddLeftGroupbox("F", { Text = "Funny Visuals" })
-local rgbEyefest = funny:AddToggle("R", { Text = "RGB Eyefestation", Tooltip = "How I even came up with that?", Value = false })
+local otherVisuals = visuals:AddRightGroupbox("F", { Text = "Other Visuals" })
+local rgbEyefest = otherVisuals:AddToggle("R", { Text = "RGB Eyefestation", Tooltip = "How I even came up with that?", Value = false })
 local hsv, rgb = Color3.fromHSV, Color3.fromRGB
 local lighting = game:GetService("Lighting")
 
-local useful = visuals:AddRightGroupbox("U", { Text = "Useful Visuals" })
+otherVisuals:AddSeparator()
+
+local FOVSlider
+local FOVEnabled = otherVisuals:AddToggle("FE", { Text = "FOV Enabled", Value = false, Callback = function(val)
+	camera.FieldOfView = val and FOVSlider.Value or 90
+end })
+
+FOVSlider = otherVisuals:AddSlider("F", { Text = "FOV", Tooltip = "90 is default", Value = 90, Min = 60, Max = 120, Step = 2, Format = function(self) return self.Value end, Callback = function(val)
+	if FOVEnabled.Value then
+		camera.FieldOfView = val
+	end
+end })
+
+local pandeCircle, pandeMiddle do
+	local u2n = UDim2.new
+	cons[#cons + 1] = event.Clock:Connect(function()
+		if FOVEnabled.Value then
+			camera.FieldOfView = FOVSlider.Value
+		end
+		
+		pandeCircle = pandeCircle or mainGui:FindFirstChild("PandemoniumMiniGame") and mainGui:FindFirstChild("PandemoniumMiniGame"):FindFirstChild("circle", true)
+		pandeMiddle = pandeMiddle or pandeCircle and pandeCircle.Parent and pandeCircle.Parent:FindFirstChild("middle")
+
+		if pandeCircle and pandeMiddle and values.Automation.PandemoniumMinigame then
+			pandeCircle.Position = pandeMiddle.Position
+
+			for i, v in pandeCircle.Parent:GetChildren() do
+				if v.Name == "deathspot" and v.Visible then
+					v.Position = u2n(0.5, pandeCircle.Position.X.Offset + 250, 0.5, pandeCircle.Position.Y.Offset)
+				end
+			end
+		end
+	end)
+end
+
+local useful = visuals:AddLeftGroupbox("U", { Text = "Useful Visuals" })
 useful:AddToggle("I", { Text = "Fullbright", Tooltip = "Aka. See in dark", Value = false, Callback = function(val, self)
 	if not val then return end
 
@@ -673,9 +816,9 @@ useful:AddToggle("F", { Text = "No Fog", Tooltip = "(Possibly) Modifier Only", V
 	values.Anti.Fog = val
 end })
 
+local doors = { }
 local tables = {
 	Defuseables = { },
-	Doors = { },
 	AllDoors = { },
 	Generators = { },
 	Switches = { },
@@ -862,35 +1005,16 @@ doorInteracts:AddButton({ Text = "Teleport to Last Door", Callback = function()
 	end
 end })
 
+local ido = workspace.IsDescendantOf
 local function cleanupTable(tbl)
-	local i = 1
-	local removed = { }
-
-	while i <= #tbl do
-		local origV = tbl[i]
-		local v = origV
-
-		if typeof(v) == "table" then
-			local res
-			for idx, val in v do
-				if typeof(val) == "Instance" then
-					res = val
-					break
-				end
-			end
-
-			v = res
-		end
-
-		if not v or not v:IsDescendantOf(game) then
+	for i = #tbl, 1, -1 do
+		local v = tbl[i]
+		if not v or not ido(v, workspace) then
 			remove(tbl, i)
-			insert(removed, v)
-		else
-			i += 1
 		end
 	end
 
-	return removed
+	return tbl
 end
 
 cons[#cons + 1] = monsterSpawned:Connect(function(monster, type)
@@ -956,7 +1080,7 @@ cons[#cons + 1] = monsterSpawned:Connect(function(monster, type)
 		while monster:IsDescendantOf(workspace) and not char:FindFirstChild("FlashBeacon") and not window.Closed do wait() end
 		if monster:IsDescendantOf(workspace) and not window.Closed then
 			local active = monster:WaitForChild("Active")
-			while not active.Value do wait() end
+			while not active.Value or not values.Anti.Eyefestation do wait() end
 
 			defused = true
 			wait()
@@ -1017,6 +1141,7 @@ local localEntities = {
 	["200"] = "A200"
 }
 
+local mainLoop, secondaryLoop
 cons[#cons + 1] = nodeMonsterSpawned:Connect(function(monster)
 	if reportedBefore[monster] or not lastRoom or lastRoom.Name == "1RidgeStart" then return end
 	reportedBefore[monster] = true
@@ -1044,14 +1169,22 @@ cons[#cons + 1] = nodeMonsterSpawned:Connect(function(monster)
 		reportedBefore[monster.Name] = ct
 	end
 
+	local isDumbPande = false
 	if cat and values.Anti[cat] then
-		monster:Destroy()
+		if (cat == "Pandemonium" or cat == "Harbinger") and not values.Anti.DontDeletePande or cat ~= "Pandemonium" and cat ~= "Harbinger" then
+			monster:Destroy()
 
-		if values.Notify.NodeMonsters and shouldNotify then
-			window:Notification({ Title = name .. " Destroyed", Text = name .. " has spawned, but it got destroyed, because of Anti " .. cat .. " setting enabled" })
+			if values.Notify.NodeMonsters and shouldNotify then
+				window:Notification({ Title = name .. " Destroyed", Text = name .. " has spawned, but it got destroyed, because of Anti " .. cat .. " setting enabled" })
+			end
+
+			return
+		elseif (cat == "Pandemonium" or cat == "Harbinger") and values.Anti.DontDeletePande then
+			isDumbPande = true
+			
+			spawn(secondaryLoop, true)
+			pcall(secondaryLoop)
 		end
-
-		return
 	end
 
 	esp.new(monster, {
@@ -1059,38 +1192,40 @@ cons[#cons + 1] = nodeMonsterSpawned:Connect(function(monster)
 		Text = name
 	}, "Node Monster")
 
-	insert(nodeMonsters, monster)
+	if not isDumbPande then
+		insert(nodeMonsters, monster)
 
-	local prevPos = monster:GetPivot()
-	local last = tick()
-	local lastMoveDelta
-	local mdCache = { }
+		local prevPos = monster:GetPivot()
+		local last = tick()
+		local lastMoveDelta
+		local mdCache = { }
 
-	local con = monster:GetPropertyChangedSignal("Position"):Connect(function()
-		local current = tick()
-		local delta = current - last
-		last = current
+		local con = monster:GetPropertyChangedSignal("Position"):Connect(function()
+			local current = tick()
+			local delta = current - last
+			last = current
 
-		local currentPos = monster:GetPivot()
-		local move = currentPos.Position - prevPos.Position
-		prevPos = currentPos
+			local currentPos = monster:GetPivot()
+			local move = currentPos.Position - prevPos.Position
+			prevPos = currentPos
 
-		local moveDelta = move * delta * ping * 1000
-		local mixedDeltas = ((lastMoveDelta or moveDelta).Magnitude + moveDelta.Magnitude) / 2
-		lastMoveDelta = moveDelta
+			local moveDelta = move * delta * ping * 1000
+			local mixedDeltas = ((lastMoveDelta or moveDelta).Magnitude + moveDelta.Magnitude) / 2
+			lastMoveDelta = moveDelta
 
-		local tbl = predictedPositions[monster] or { }
-		predictedPositions[monster] = tbl
+			local tbl = predictedPositions[monster] or { }
+			predictedPositions[monster] = tbl
 
-		tbl[1] = currentPos:Lerp(charPos, mixedDeltas / 7.75)
-		tbl[2] = max(append(mdCache, mixedDeltas, 30) * 70, max(700 * ping, 80))
-	end)
+			tbl[1] = currentPos:Lerp(charPos, mixedDeltas / 7.75)
+			tbl[2] = max(append(mdCache, mixedDeltas, 30) * 70, max(700 * ping, 80))
+		end)
 
-	cons[#cons + 1] = monster.Destroying:Once(function()
-		remove(nodeMonsters, find(nodeMonsters, monster))
-		predictedPositions[monster] = nil
-		con:Disconnect()
-	end)
+		cons[#cons + 1] = monster.Destroying:Once(function()
+			remove(nodeMonsters, find(nodeMonsters, monster))
+			predictedPositions[monster] = nil
+			con:Disconnect()
+		end)
+	end
 
 	if values.Notify.NodeMonsters and shouldNotify then
 		window:Notification({ Title = name ~= "Mirage" and "Monster Spawned" or "ITS MIRAGE", Text = name .. " has spawned!" .. (name == "Mirage" and "\nThat's Mirage, no worries about it." or cat == "Pandemonium" and "\nHappy minigames! :P" or "") })
@@ -1277,10 +1412,7 @@ local function canCarry(item)
 end
 
 local red = Color3.new(1)
-local mainLoop do 
-	local cycles = 0
-	local fppCycles = 0
-
+do
 	local consCd = false
 	local consumeNeostyk do
 		consumeNeostyk = function()
@@ -1329,22 +1461,71 @@ local mainLoop do
 		consCd = false
 	end
 
-	mainLoop = function()
-		char = plr.Character or char or dummy
-		camera = workspace.CurrentCamera or camera
-		cycles = (cycles + 1) % 60
-		fppCycles = (fppCycles + 1) % 2
-
-		if cycles == 0 then
-			for i, v in tables do
-				cleanupTable(v)
+	local fish, fishAnim, efgaze, wh, sc1, lp, app, appear
+	
+	local prevAntiPande = values.Anti.DontDeletePande and (values.Anti.Pandemonium or values.Anti.Harbinger)
+	local removeFails = setmetatable({ }, { __mode = "kv" })
+	local oldLockerTimes = { }
+	
+	secondaryLoop = function(doWait)
+		if doWait then
+			wait()
+			return spawn(secondaryLoop)
+		end
+		
+		shakeOff = shakeOff or rstorage:FindFirstChild("ParasiteShakeOff", true)
+		if values.Anti.Parasites and shakeOff then
+			shakeOff:FireServer()
+		end
+		
+		if not values.Anti.LockerClaustrophobia then
+			for i, v in oldLockerTimes do
+				if v:IsDescendantOf(workspace) then
+					i:SetAttribute("ClaustrophobiaKickOutTime", v[1])
+					i:SetAttribute("ClaustrophobiaStartTime", v[2])
+				else
+					oldLockerTimes[i] = nil
+				end
+			end
+		else
+			for i, v in cleanupTable(tables.Lockers) do
+				local t = oldLockerTimes[v] or { }
+				local v1 = v:GetAttribute("ClaustrophobiaKickOutTime")
+				
+				if v1 ~= 9e9 then
+					t[1] = v1
+					v:SetAttribute("ClaustrophobiaKickOutTime", 9e9)
+				end
+				
+				local v2 = v:GetAttribute("ClaustrophobiaStartTime")
+				if v2 ~= 9e9 then
+					t[2] = v2
+					v:SetAttribute("ClaustrophobiaStartTime", 9e9)
+				end
 			end
 		end
-
+		
+		local antiPande = values.Anti.DontDeletePande and (values.Anti.Pandemonium or values.Anti.Harbinger)
+		if antiPande ~= prevAntiPande then
+			prevAntiPande = antiPande
+			if not antiPande then
+				plr:SetAttribute("PandeMinigame", nil)
+			end
+		end
+		
+		if antiPande then
+			plr:SetAttribute("PandeMinigame", true)
+		end
+		
+		if antiPande then
+			pcall(rs.UnbindFromRenderStep, rs, "playerDistance")
+			pcall(rs.UnbindFromRenderStep, rs, "PandemoniumDetect")
+		end
+		
 		if values.Anti.Eyefestation then
-			local sound = mainGui:FindFirstChild("EyefestationGaze", true)
-			if sound then
-				for i, v in sound.Parent:GetChildren() do
+			efgaze = efgaze or mainGui:FindFirstChild("EyefestationGaze", true)
+			if efgaze then
+				for i, v in efgaze.Parent:GetChildren() do
 					if v:IsA("Sound") then
 						v.Playing = false
 					end
@@ -1368,70 +1549,23 @@ local mainLoop do
 		if values.Automation.NeoStyk and pfolder.Health.Value + 10 <= pfolder.MaxHealth.Value then
 			spawn(consumeNeostyk)
 		end
-
-		if values.Anti.WallDweller then
-			for i, v in tables.Dwellers do
-				if v:IsDescendantOf(workspace) then
-					v:FireServer(nil, true, false)
-				end
-			end
-		end
-
-		if values.Anti.Fish then
-			local fish = assetsRFolder:FindFirstChild("Fish")
-			if fish then
-				local anim = fish:FindFirstChild("AnimationController")
-				if anim then
-					anim.Name = "NotAnimationController"
-				end
-			end
-
-			if char:FindFirstChild("Fish") then
-				char.Fish:Destroy()
-			end
-		else
-			local fish = assetsRFolder:FindFirstChild("Fish")
-			if fish then
-				local anim = fish:FindFirstChild("NotAnimationController")
-				if anim then
-					anim.Name = "AnimationController"
-				end
-			end
-		end
-
-		if values.Anti.KittyClock and pfolder.Inventory:FindFirstChild("KittyClock") then
-			activate("KittyClock", "StopScream")
-
-			if char:FindFirstChild("KittyClock") then
-				char.KittyClock:Destroy()
-			end
-		end
-
-		if values.Visual.AntiCameraFlip then
-			pcall(rs.UnbindFromRenderStep, rs, "CameraFlip")
-		end
-
-		for i, v in tables.Landmines do
+		
+		for i, v in cleanupTable(tables.Landmines) do
 			v.CanTouch = not values.Anti.DamageParts
 		end
 
 		if values.Anti.WitchingHour then
-			local wh = assetsRFolder:FindFirstChild("WitchingHour", true)
+			wh = wh or assetsRFolder:FindFirstChild("WitchingHour", true)
 			if wh then
 				wh.Name = "NotWitchingHour"
 			end
 		else
-			local wh = assetsRFolder:FindFirstChild("NotWitchingHour", true)
+			wh = wh or assetsRFolder:FindFirstChild("NotWitchingHour", true)
 			if wh then
 				wh.Name = "WitchingHour"
 			end
 		end
-
-		local sc1 = mainGui:FindFirstChild("SkinlessClient", true)
-		if sc1 then
-			sc1:SetAttribute("DespawnAfterSeconds", values.Anti.Skinless and -9e6 or 60)
-		end
-
+		
 		if values.Other.InfiniteOxygen then
 			for i, v in lighting:GetChildren() do
 				if v:IsA("Sound") then
@@ -1455,54 +1589,33 @@ local mainLoop do
 		end
 
 		if values.Anti.Lopee then
-			local lp = mainGui:FindFirstChild("LopeePart", true)
+			lp = lp or mainGui:FindFirstChild("LopeePart", true)
 			if lp then
 				lp.Name = "NotLopeePart"
 			end
 		else
-			local lp = mainGui:FindFirstChild("NotLopeePart", true)
+			lp = lp or mainGui:FindFirstChild("NotLopeePart", true)
 			if lp then
 				lp.Name = "LopeePart"
 			end
 		end
 
-		for i, v in tables.EdenTrees do
+		for i, v in cleanupTable(tables.EdenTrees) do
 			v.PrimaryPart = not values.Anti.EdenTree and v:FindFirstChild("RootPart") or nil
 		end
 
 		if values.Anti.GOM then
-			local app = mainGui:FindFirstChild("GOMAppear", true)
+			app = app or mainGui:FindFirstChild("GOMAppear", true)
 			if app then
 				app.Name = "NotGOMAppear"
 			end
 		else
-			local app = mainGui:FindFirstChild("NotGOMAppear", true)
+			app = app or mainGui:FindFirstChild("NotGOMAppear", true)
 			if app then
 				app.Name = "GOMAppear"
 			end
 		end
-
-		if values.Anti.Coagulate then
-			plr:SetAttribute("CurrentRoomNumber", round(random() * 100000))
-			plr:SetAttribute("Dead", true)
-		else
-			plr:SetAttribute("CurrentRoomNumber", nil)
-			plr:SetAttribute("Dead", nil)
-		end
-
-		lighting.FogEnd = values.Anti.Fog and 9e6 or originalFogEnd
-
-		if mainGui:FindFirstChild("Popups") then
-			local appear = mainGui:FindFirstChild("PopUp_Appear", true)
-			if appear then
-				appear.Volume = values.Visual.NoPopups and 0 or 1
-			end
-
-			if values.Visual.NoPopups then
-				mainGui.Popups:ClearAllChildren()
-			end
-		end
-
+		
 		if values.Automation.Hide and #nodeMonsters > 0 and camera then
 			if not values.Automation.UseLockers then
 				if not isSafe(charPos) then
@@ -1521,22 +1634,13 @@ local mainLoop do
 			playerSpoofer.Enabled = false
 			playerSpoofer.OffsetCFrame = nil
 		end
-
-		if values.Anti.Turret then
-			for i, v in tables.Turrets do
-				for idx, val in v:GetChildren() do
-					if val.ClassName:match("Remote") then
-						val:Destroy()
-					end
-				end
-			end
-		end
-
+		
 		if values.Other.BetterDoors then
 			local toRemove = { }
 
-			for i, v in tables.AllDoors do
-				if v:FindFirstChild("OpenValue", true) and v:FindFirstChild("OpenValue", true).Value or v:GetAttribute("Locked") then
+			for i, v in cleanupTable(tables.AllDoors) do
+				local ov = v:FindFirstChild("OpenValue", true)
+				if ov and ov.Value or v:GetAttribute("Locked") then
 					insert(toRemove, v)
 				else
 					local pp = v:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -1550,57 +1654,18 @@ local mainLoop do
 				remove(tables.AllDoors, find(tables.AllDoors, v))
 			end
 		end
-
-		shakeOff = shakeOff or rstorage:FindFirstChild("ParasiteShakeOff", true)
-		if values.Anti.Parasites and shakeOff then
-			shakeOff:FireServer()
+		
+		if values.Visual.AntiCameraFlip then
+			pcall(rs.UnbindFromRenderStep, rs, "CameraFlip")
 		end
-
-		if values.AutoPick.Enabled and fppCycles == 0 then
-			if values.AutoPick.Currency then
-				for i, v in tables.Currency do
-					fpp(v, 1, true, ping + 0.05)
-				end
-			end
-
-			if values.AutoPick.Items then
-				for i, v in tables.Items do
-					local model = v:FindFirstAncestorOfClass("Model")
-					if model and canCarry(model) then
-						fpp(v, 1, true, ping + 0.1)
-					end
-				end
-
-				if values.AutoPick.LightSources then
-					for i, v in tables.LightItems do
-						local model = v:FindFirstAncestorOfClass("Model")
-						if model and canCarry(model) then
-							fpp(v, 1, true, ping + 0.1)
-						end
-					end
-				end
-			end
-
-			if values.AutoPick.Keycards then
-				for i, v in tables.Cards do
-					local model = v:FindFirstAncestorOfClass("Model")
-					if model and canCarry(model) then
-						fpp(v, 1, true, ping + 0.3)
-					end
-				end
-			end
-		end
-
-		if values.Automation.DisarmHazards then
-			for i, v in tables.Defuseables do
-				fpp(v, 1, true, ping + 0.05, 24)
-			end
-		end
-
+		
 		if workspace.DistributedGameTime > 20 then
 			local toRemove = { }
-			for _, c in bannedInstances do
+			
+			for idx = 1, #bannedInstances do
+				local c = bannedInstances[idx]
 				local v, i = c[1], c[2]
+				
 				if not originalParents[v] then
 					originalParents[v] = v.Parent
 
@@ -1617,21 +1682,151 @@ local mainLoop do
 					theirRooms[v] = room
 				end
 
-				if theirRooms[v] == nil or not theirRooms[v]:IsDescendantOf(game) then
+				if theirRooms[v] == nil or not theirRooms[v]:IsDescendantOf(roomsFolder) then
 					theirRooms[v] = nil
 					originalParents[v] = nil
-					insert(toRemove, v)
+					insert(toRemove, idx)
 				else
-					pcall(reparent, v, not values.Anti[i] and originalParents[v] or nil)
+					local s = pcall(reparent, v, not values.Anti[i] and originalParents[v] or nil)
+					if not s then
+						local rf = (removeFails[v] or 0) + 1
+						removeFails[v] = rf
+						
+						if rf >= 3 then
+							insert(toRemove, idx)
+						end
+					end
 				end
 			end
 
-			for i, v in toRemove do
-				remove(bannedInstances, find(bannedInstances, v))
+			for i = #toRemove, 1, -1 do
+				remove(bannedInstances, toRemove[i])
+			end
+		end
+	end
+	
+	mainLoop = function()
+		char = plr.Character or char or dummy
+		camera = workspace.CurrentCamera or camera
+
+		if values.Anti.WallDweller then
+			for i, v in cleanupTable(tables.Dwellers) do
+				v:FireServer(nil, true, false)
 			end
 		end
 
-		for i, v in tables.Generators do
+		if values.Anti.Fish then
+			fish = fish or assetsRFolder:FindFirstChild("Fish")
+			if fish then
+				fishAnim = fishAnim or fish:FindFirstChild("AnimationController")
+				if fishAnim then
+					fishAnim.Name = "NotAnimationController"
+				end
+			end
+
+			if char:FindFirstChild("Fish") then
+				char.Fish:Destroy()
+			end
+		else
+			fish = fish or assetsRFolder:FindFirstChild("Fish")
+			if fish then
+				fishAnim = fishAnim or fish:FindFirstChild("NotAnimationController")
+				if fishAnim then
+					fishAnim.Name = "AnimationController"
+				end
+			end
+		end
+
+		if values.Anti.KittyClock and pfolder.Inventory:FindFirstChild("KittyClock") then
+			activate("KittyClock", "StopScream")
+
+			if char:FindFirstChild("KittyClock") then
+				char.KittyClock:Destroy()
+			end
+		end
+
+		sc1 = sc1 or mainGui:FindFirstChild("SkinlessClient", true)
+		if sc1 then
+			sc1:SetAttribute("DespawnAfterSeconds", values.Anti.Skinless and -9e6 or 60)
+		end
+
+		if values.Anti.Coagulate then
+			plr:SetAttribute("CurrentRoomNumber", round(random() * 100000))
+			plr:SetAttribute("Dead", true)
+		else
+			plr:SetAttribute("CurrentRoomNumber", nil)
+			plr:SetAttribute("Dead", nil)
+		end
+
+		lighting.FogEnd = values.Anti.Fog and 9e6 or originalFogEnd
+
+		if mainGui:FindFirstChild("Popups") then
+			appear = appear or mainGui:FindFirstChild("PopUp_Appear", true)
+			if appear then
+				appear.Volume = values.Visual.NoPopups and 0 or 1
+			end
+
+			if values.Visual.NoPopups and mainGui:FindFirstChild("Popups") then
+				mainGui.Popups:ClearAllChildren()
+			end
+		end
+
+		if values.Anti.Turret then
+			for i, v in cleanupTable(tables.Turrets) do
+				for idx, val in v:GetChildren() do
+					if val.ClassName:match("Remote") then
+						val:Destroy()
+					end
+				end
+			end
+		end
+
+		if values.AutoPick.Enabled then
+			if values.AutoPick.Currency then
+				for i, v in cleanupTable(tables.Currency) do
+					if v.HoldDuration == 0 or instant.Value then
+						fpp(v, 1, true, ping + 0.05)
+					else
+						v:InputHoldBegin()
+					end
+				end
+			end
+
+			if values.AutoPick.Items then
+				for i, v in cleanupTable(tables.Items) do
+					local model = v:FindFirstAncestorOfClass("Model")
+					if model and canCarry(model) then
+						fpp(v, 1, true, ping + 0.1)
+					end
+				end
+
+				if values.AutoPick.LightSources then
+					for i, v in cleanupTable(tables.LightItems) do
+						local model = v:FindFirstAncestorOfClass("Model")
+						if model and canCarry(model) then
+							fpp(v, 1, true, ping + 0.1)
+						end
+					end
+				end
+			end
+
+			if values.AutoPick.Keycards then
+				for i, v in cleanupTable(tables.Cards) do
+					local model = v:FindFirstAncestorOfClass("Model")
+					if model and canCarry(model) then
+						fpp(v, 1, true, ping + 0.3)
+					end
+				end
+			end
+		end
+
+		if values.Automation.DisarmHazards then
+			for i, v in cleanupTable(tables.Defuseables) do
+				fpp(v, 1, true, ping + 0.05, 24)
+			end
+		end
+
+		for i, v in cleanupTable(tables.Generators) do
 			esp.new(v.Model, {
 				Visible = v.Fixed.Value < 100,
 				Text = "Generator"
@@ -1642,7 +1837,7 @@ local mainLoop do
 			end
 		end
 
-		for i, v in tables.Switches do
+		for i, v in cleanupTable(tables.Switches) do
 			local prox = v:FindFirstChildWhichIsA("ProximityPrompt", true)
 			esp.new(v, {
 				RotationLevel = prox and prox.Enabled and 0.5 or -0.5,
@@ -1689,12 +1884,27 @@ spawn(function()
 end)
 
 spawn(function()
-	while wait() do
+	while rs.Stepped:Wait() do
 		local s, e = pcall(mainLoop)
 		if s and e then
 			break
 		elseif not s then
 			warn("MAIN LOOP ERROR:", e)
+		end
+
+		if window.Closed then
+			break
+		end
+	end
+end)
+
+spawn(function()
+	while wait(0.2) do
+		local s, e = pcall(secondaryLoop)
+		if s and e then
+			break
+		elseif not s then
+			warn("SECONDARY LOOP ERROR:", e)
 		end
 
 		if window.Closed then
@@ -1765,6 +1975,7 @@ spawn(function()
 	end
 end)
 
+local doorESP
 local function onInstance(v : Instance, alreadyExisted)
 	local c : string, n : string = v.ClassName, v.Name
 	local p = v.Parent
@@ -1780,14 +1991,25 @@ local function onInstance(v : Instance, alreadyExisted)
 				roomNum += 1
 			end
 
-			insert(tables.Doors, { v, roomNum })
+			insert(doors, { v, roomNum })
 
-			esp.new(v, {
-				HighlightAdornee = v:WaitForChild("Door", ping + 0.1) or v,
-				RotationLevel = v:GetAttribute("Locked") and 1 or 0,
-				TopText = (v:GetAttribute("Locked") and '<font size="10">[ Locked ]</font>\n' or "") .. '<font size="12">' .. other:Smart(v:WaitForChild("Enter", 9e9).Value.Name) .. "</font>",
-				Text = "Room: <b>" .. (roomNum + 1 - (traversalOrder[p.Parent] or 0)) .. "</b>"
-			}, "Door")
+			local rn = roomNum + 1
+			local RN = rn - (traversalOrder[p.Parent] or 0)
+			
+			if rn == RN then
+				if doorESP then
+					doorESP:Destroy()
+				end
+				
+				doorESP = esp.new(v, {
+					HighlightAdornee = v:WaitForChild("Door", ping + 0.1) or v,
+					RotationLevel = v:GetAttribute("Locked") and 1 or 0,
+					TopText = (v:GetAttribute("Locked") and '<font size="10">[ Locked ]</font>\n' or ""),
+					Text = "Room: <b>" .. RN .. "</b>"
+				}, "Door")
+				
+				doorESP.TopText = (v:GetAttribute("Locked") and '<font size="10">[ Locked ]</font>\n' or "") .. '<font size="12">' .. other:Smart(v:WaitForChild("Enter", 9e9).Value.Name) .. "</font>"
+			end
 		elseif n == "Tripwire" then -- tripwire
 			esp.new(v:WaitForChild("Main", 9e9), {
 				HighlightAdornee = v,
@@ -1804,6 +2026,7 @@ local function onInstance(v : Instance, alreadyExisted)
 			}, "Fake Object")
 
 			insert(bannedInstances, { v:WaitForChild("ProximityPrompt", 9e9), "MonsterLocker" })
+			secondaryLoop(true)
 		elseif n == "DiVine" then -- DiVine
 			esp.new(v, {
 				Text = "DiVine",
@@ -1811,6 +2034,7 @@ local function onInstance(v : Instance, alreadyExisted)
 			}, "Weak Monster")
 
 			insert(bannedInstances, { v, "DiVine" })
+			secondaryLoop(true)
 		elseif n == "DiVineRoot" then
 			wait(ping + 0.1)
 			if v:FindFirstChild("DwellerModel") then -- Wall Dweller
@@ -1822,6 +2046,7 @@ local function onInstance(v : Instance, alreadyExisted)
 				insert(tables.Dwellers, v:WaitForChild("Events", 9e9):WaitForChild("RemoteEvent", 9e9))
 			else -- DiVine
 				insert(bannedInstances, { v, "DiVine" })
+				secondaryLoop(true)
 			end
 		elseif n == "NoGood" and p == workspace or n == "Coagulate" and p == camera then -- NoGood / Coagulate
 			wait(wait())
@@ -1842,6 +2067,7 @@ local function onInstance(v : Instance, alreadyExisted)
 			elseif pc == "Part" and p:WaitForChild("Weld", ping + 0.1) then
 				monsterSpawned:Fire(p, "Searchlight")
 				insert(bannedInstances, { p:WaitForChild("RemoteEvent", 9e9), "Searchlights" })
+				secondaryLoop(true)
 			end
 		elseif n == "NonAnimated" and pc == "Model" and p:WaitForChild("Active", ping + 0.1) then -- eyefestation
 			local col = v:WaitForChild("RightEye", 9e9)
@@ -1887,16 +2113,20 @@ local function onInstance(v : Instance, alreadyExisted)
 
 			insert(bannedInstances, { p:WaitForChild("RemoteEvent", 9e9), "GoodPeople" })
 			insert(bannedInstances, { p:WaitForChild("RemoteEvent", 9e9), "DamageParts" })
+			secondaryLoop(true)
 		elseif n == "LockerCollision" then
 			if p.Name ~= "MonsterLocker" then
 				insert(tables.Lockers, p)
 			end
 		elseif (v.Color == red and v.Transparency == 1 and v.Material == ff or pn:lower():match("damag") or n:lower():match("damag")) and (p.Parent == roomsFolder or not p:IsA("Model")) then -- damagepart
-			insert(bannedInstances, { v, "DamageParts" })
+			insert(bannedInstances, { v, v.Name == "FirewallPit" and "FirewallDamageParts" or "DamageParts" })
+			secondaryLoop(true)
 		elseif n == "MineSpawn" then
 			insert(bannedInstances, { v:WaitForChild("RemoteEvent", 9e9), "DamageParts" })
+			secondaryLoop(true)
 		elseif n == "PlayerFog" then
 			insert(bannedInstances, { p, "Fog" })
+			secondaryLoop(true)
 		elseif n == "Root" and pc == "Model" and p:WaitForChild("Barrel", ping + 0.1) then -- Turret
 			if p.Parent:GetAttribute("Active") == nil then return end
 			esp.new(v, {
@@ -1906,6 +2136,7 @@ local function onInstance(v : Instance, alreadyExisted)
 			}, "Hazard")
 
 			insert(bannedInstances, { p.Parent:WaitForChild("DesiredLocation", 9e9), "Turret" })
+			secondaryLoop(true)
 		end
 	elseif c == "ProximityPrompt" then
 		if pn == "ProxyPart" and p.Parent.ClassName == "Model" then
@@ -1914,7 +2145,7 @@ local function onInstance(v : Instance, alreadyExisted)
 			local nl = name:lower()
 			local it = (model:GetAttribute("InteractionType") or ""):lower()
 
-			if name == "Toilet" or name == "Dryer" or nl == "highlight" or nl == "tripwire" or nl:match("generator") or it:match("chest") or it:match("box") or it:match("crate") or nl:match("bed") then return end
+			if name == "Toilet" or name == "PakrourSuitTakeOff" or name == "ParkourSuitTakeOff" or name == "Dryer" or nl == "highlight" or nl == "tripwire" or nl:match("generator") or it:match("chest") or it:match("box") or it:match("crate") or nl:match("bed") then return end
 
 			local isPassword = name:match("Password")
 
@@ -1945,7 +2176,7 @@ local function onInstance(v : Instance, alreadyExisted)
 					code = c
 				end
 			else
-				local name = getName(model, type)
+				local name = getName(model, type):gsub("Pakrour", "Parkour")
 				local rot, isLight = getRotation(name, type)
 
 				esp.new(p, {
@@ -1990,6 +2221,7 @@ local function onInstance(v : Instance, alreadyExisted)
 				RotationLevel = -0.4,
 			}, "Weak Monster")
 			insert(bannedInstances, { p, "Squiddle" })
+			secondaryLoop(true)
 		elseif n == "TreeBody" and p:WaitForChild("RootPart", ping + 0.1) then -- eden tree
 			insert(tables.EdenTrees, p)
 			esp.new(p, {
@@ -1999,6 +2231,7 @@ local function onInstance(v : Instance, alreadyExisted)
 		end
 	elseif n:sub(1, 4) == "Fish" and #n == 8 then
 		insert(bannedInstances, { v, "Bottomfeeder" })
+		secondaryLoop(true)
 	end
 end
 
@@ -2006,8 +2239,9 @@ spawn(function()
 	local e = eventsRFolder.CurrentRoomNumber
 	roomNum = e:InvokeServer()
 
+	print(fire.ping)
 	while not window.Closed do
-		ping = plr:GetNetworkPing()
+		ping = fire.ping
 		wait()
 	end
 end)
