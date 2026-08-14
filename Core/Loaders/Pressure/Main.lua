@@ -217,9 +217,11 @@ end)
 local gameFramework = nil
 pcall(function()
 	local getgc = env.getgc
+	local getmetatable = getmetatable
+	
 	if getgc then
 		local function checkObj(v)
-			return v.Parkour and not v.PParkour and v.Toolbar and v.UI
+			return not getmetatable(v) and v.Parkour and not v.PParkour and v.Toolbar and v.UI
 		end
 		
 		for i, v in getgc(true) do
