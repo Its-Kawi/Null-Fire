@@ -1975,6 +1975,10 @@ spawn(function()
 	end
 end)
 
+local function handleDoorESPTopText(doorESP, v)
+	doorESP.TopText = (v:GetAttribute("Locked") and '<font size="10">[ Locked ]</font>\n' or "") .. '<font size="12">' .. other:Smart(v:WaitForChild("Enter", 9e9).Value.Name) .. "</font>"
+end
+
 local doorESP
 local function onInstance(v : Instance, alreadyExisted)
 	local c : string, n : string = v.ClassName, v.Name
@@ -2002,13 +2006,13 @@ local function onInstance(v : Instance, alreadyExisted)
 				end
 				
 				doorESP = esp.new(v, {
-					HighlightAdornee = v:WaitForChild("Door", ping + 0.1) or v,
 					RotationLevel = v:GetAttribute("Locked") and 1 or 0,
 					TopText = (v:GetAttribute("Locked") and '<font size="10">[ Locked ]</font>\n' or ""),
 					Text = "Room: <b>" .. RN .. "</b>"
 				}, "Door")
 				
-				doorESP.TopText = (v:GetAttribute("Locked") and '<font size="10">[ Locked ]</font>\n' or "") .. '<font size="12">' .. other:Smart(v:WaitForChild("Enter", 9e9).Value.Name) .. "</font>"
+				spawn(handleDoorESPTopText, doorESP, v)
+				doorESP.HighlightAdornee = v:WaitForChild("Door", ping + 0.1) or v
 			end
 		elseif n == "Tripwire" then -- tripwire
 			esp.new(v:WaitForChild("Main", 9e9), {
