@@ -344,9 +344,21 @@ local inpFire
 local function onInput(v)
 	local input
 	local laneNum = tonumber(v.Name:sub(5))
+	local start = tick()
 
 	while not input and vsrgConnection do
-		input = v:WaitForChild("GamepadBinding", 1) or v:WaitForChild("KeyboardBinding", 1)
+		for idx, val in v:GetChildren() do
+			if val.Name:match("Gamepad") or tick() - start > 2 and val.Name:match("Keyboard") or tick() - start > 4 then
+				input = val
+				break
+			end
+		end
+		
+		if input then
+			break
+		end
+		
+		wait()
 	end
 
 	if not input then return end
