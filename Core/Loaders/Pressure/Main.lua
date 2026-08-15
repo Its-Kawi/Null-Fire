@@ -117,6 +117,7 @@ playerSpoofer.OffsetCFrame = nil
 
 local insert, remove, find = table.insert, table.remove, table.find
 local spawn = task.spawn
+local delay = task.delay
 local max, min = math.max, math.min
 local tick = tick
 local wait = task.wait
@@ -192,13 +193,16 @@ local namecallMethods = {
 }
 
 local ignoreNC = false
+local noDamageCases = setmetatable({ }, { __mode = "k" })
+
 hookmetamethod("__namecall", function(self, old, ...)
-	if self.Parent ~= eventsRFolder or ignoreNC then return old(self, ...) end
+	local ndc = noDamageCases[self]
+	if self.Parent ~= eventsRFolder and not ndc or ignoreNC then return old(self, ...) end
 
 	local ncm = namecallMethods[self.ClassName]
 	if not ncm then return old(self, ...) end
 
-	local rh = remoteHooks[self.Name]
+	local rh = ndc and remoteHooks.LocalDamage or remoteHooks[self.Name]
 	if not rh or not values.Anti[rh[1]] then return old(self, ...) end
 
 	local method = namecall()
@@ -843,7 +847,7 @@ local theirRooms = { }
 
 local bfs = 400
 local bruteforceStop = { }
-local unlocked = setmetatable({ }, { __mode = "kv" })
+local unlocked = setmetatable({ }, { __mode = "k" })
 local buzy = false
 
 local teleportSlider = Instance.new("CFrameValue")
@@ -895,6 +899,23 @@ window.OnClose:Once(function()
 		hookfunction(i, v)
 	end
 end)
+
+local function getDoor(obj)
+	local root = obj:FindFirstChild("TouchPart", true) or obj:FindFirstChild("Root", true) or obj:FindFirstChild("RootPart", true) or obj.PrimaryPart
+	if not root then return end
+
+	local base = obj:FindFirstChild("BaseAddition", true)
+	if base then
+		return base.Parent.Parent, root
+	end
+
+	local door = obj:FindFirstChild("Door", true)
+	if door and door:IsA("Model") then
+		return door, root
+	end
+
+	return root, root
+end
 
 local bruteforceLock do
 	local bfd = 4.5
@@ -957,23 +978,6 @@ local bruteforceLock do
 	end
 end
 
-local getDoor; getDoor = function(obj)
-	local root = obj:FindFirstChild("Root", true) or obj:FindFirstChild("RootPart", true) or obj.PrimaryPart
-	if not root then return end
-
-	local base = obj:FindFirstChild("BaseAddition", true)
-	if base then
-		return base.Parent.Parent, root
-	end
-
-	local door = obj:FindFirstChild("Door", true)
-	if door and door:IsA("Model") then
-		return door, root
-	end
-
-	return root, root
-end
-
 local doorInteracts = interact:AddRightGroupbox("D", { Text = "Doors" })
 doorInteracts:AddButton({ Text = "Bruteforce Closest Door Code", Callback = function()
 	local closest, dist = nil, math.huge
@@ -1028,13 +1032,13 @@ cons[#cons + 1] = monsterSpawned:Connect(function(monster, type)
 		local defused = false
 		spawn(function()
 			local nonAnim = monster.NonAnimated
-			local reye = nonAnim:WaitForChild("RightEye")
+			local reye = nonAnim:WaitForChild("RightEye", 9e9)
 			local ocol = reye.Color
 			local wasRGB = false
 			local lastCol = false
 
 			while monster and monster:IsDescendantOf(workspace) do
-				reye.Name = values.Anti.Eyefestation and reye:WaitForChild("BeamMesh").Transparency ~= 1 and not defused and "REye" or "RightEye"
+				reye.Name = values.Anti.Eyefestation and reye:WaitForChild("BeamMesh", 9e9).Transparency ~= 1 and not defused and "REye" or "RightEye"
 				if rgbEyefest.Value and not window.Closed then
 					wasRGB = true
 
@@ -1081,7 +1085,7 @@ cons[#cons + 1] = monsterSpawned:Connect(function(monster, type)
 
 		while monster:IsDescendantOf(workspace) and not char:FindFirstChild("FlashBeacon") and not window.Closed do wait() end
 		if monster:IsDescendantOf(workspace) and not window.Closed then
-			local active = monster:WaitForChild("Active")
+			local active = monster:WaitForChild("Active", 9e9)
 			while not active.Value or not values.Anti.Eyefestation do wait() end
 
 			defused = true
@@ -1133,7 +1137,7 @@ local append do
 	end
 end
 
-local reportedBefore = setmetatable({ }, { __type = "kv" })
+local reportedBefore = setmetatable({ }, { __type = "k" })
 local localEntities = {
 	pande = "Pandemonium",
 	nium = "Pandemonium",
@@ -1354,6 +1358,10 @@ local function getName(model, type)
 		return "The Gun"
 	elseif n == "winduplight" then
 		return "Windup Light"
+	elseif n == "25healthboost" then
+		return "Heal"
+	elseif n == "intensityincrease" then
+		return "Soul"
 	end
 
 	local semi = other:Smart(name)
@@ -1414,6 +1422,8 @@ local function canCarry(item)
 end
 
 local red = Color3.new(1)
+local fakeMax = { Value = 100 }
+
 do
 	local consCd = false
 	local consumeNeostyk do
@@ -1421,7 +1431,7 @@ do
 			if consCd then return end
 
 			local neo = eventsRFolder:FindFirstChild("NeoStyk")
-			if neo and pfolder.NeoStyk.Value > 0 and pfolder.Health.Value < pfolder.MaxHealth.Value then
+			if neo and pfolder.NeoStyk.Value > 0 and pfolder.Health.Value < (pfolder:FindFirstChild("MaxHealth") or fakeMax).Value then
 				consCd = true
 
 				local neos = pfolder.NeoStyk.Value
@@ -1466,8 +1476,15 @@ do
 	local fish, fishAnim, efgaze, wh, sc1, lp, app, appear
 	
 	local prevAntiPande = values.Anti.DontDeletePande and (values.Anti.Pandemonium or values.Anti.Harbinger)
-	local removeFails = setmetatable({ }, { __mode = "kv" })
+	local removeFails = setmetatable({ }, { __mode = "k" })
 	local oldLockerTimes = { }
+	
+	local function openDoor(ps, re, ov)
+		if not ps:GetAttribute("Fired") and not ov.Value and (spoofedCharPos.Position - ps:GetPivot().Position).Magnitude < 10 then
+			ps:SetAttribute("Fired", true)
+			re:FireServer(true)
+		end
+	end
 	
 	secondaryLoop = function(doWait)
 		if doWait then
@@ -1540,15 +1557,15 @@ do
 			end
 		end
 
-		if values.Automation.HealthBoost and pfolder.Health.Value + 40 <= pfolder.MaxHealth.Value then
+		if values.Automation.HealthBoost and pfolder.Health.Value + 40 <= (pfolder:FindFirstChild("MaxHealth") or fakeMax).Value then
 			spawn(consumeWithRegenCD, "HealthBoost", "Activated")
 		end
 
-		if values.Automation.Medkit and pfolder.Health.Value + 40 <= pfolder.MaxHealth.Value then
+		if values.Automation.Medkit and pfolder.Health.Value + 40 <= (pfolder:FindFirstChild("MaxHealth") or fakeMax).Value then
 			spawn(consumeWithRegenCD, "Medkit", true)
 		end
 
-		if values.Automation.NeoStyk and pfolder.Health.Value + 10 <= pfolder.MaxHealth.Value then
+		if values.Automation.NeoStyk and pfolder.Health.Value + 10 <= (pfolder:FindFirstChild("MaxHealth") or fakeMax).Value then
 			spawn(consumeNeostyk)
 		end
 		
@@ -1645,9 +1662,17 @@ do
 				if ov and ov.Value or v:GetAttribute("Locked") then
 					insert(toRemove, v)
 				else
-					local pp = v:FindFirstChildWhichIsA("ProximityPrompt", true)
-					if pp then
-						fpp(pp, 1, v:FindFirstChild("Exit") or false, 0.05, 16)
+					local re = v:FindFirstChild("RemoteEvent")
+					if re and re.ClassName == "RemoteEvent" then
+						local _, ps = getDoor(v)
+						if ps and (spoofedCharPos.Position - ps:GetPivot().Position).Magnitude < 10 then
+							delay(ping + 3, openDoor, ps, re, ov)
+						end
+					else
+						local pp = v:FindFirstChildWhichIsA("ProximityPrompt", true)
+						if pp then
+							fpp(pp, 1, v:FindFirstChild("Exit") or false, 0.05, 16)
+						end
 					end
 				end
 			end
@@ -1982,6 +2007,7 @@ local function handleDoorESPTopText(doorESP, v)
 end
 
 local doorESP
+local alreadyDone = setmetatable({ }, { __mode = "k" })
 local function onInstance(v : Instance, alreadyExisted)
 	local c : string, n : string = v.ClassName, v.Name
 	local p = v.Parent
@@ -2094,7 +2120,7 @@ local function onInstance(v : Instance, alreadyExisted)
 				model = p:FindFirstChildOfClass("Model")
 			end
 
-			esp.new(model:WaitForChild("HumanoidRootPart"), {
+			esp.new(model:WaitForChild("HumanoidRootPart", 9e9), {
 				HighlightAdornee = model,
 				Text = other:Smart(model.Name)
 			}, "Monster")
@@ -2111,7 +2137,7 @@ local function onInstance(v : Instance, alreadyExisted)
 			insert(tables.Defuseables, v:WaitForChild("ProximityPrompt", 9e9))
 			insert(tables.Landmines, v)
 		elseif n == "GrowlPart" and pc == "Model" then -- good people, aka fake door
-			esp.new(p:WaitForChild("TricksterDoor"), {
+			esp.new(p:WaitForChild("TricksterDoor", 9e9), {
 				Text = "Good People",
 				TopText = '<font size="10">(Fake Door)</font>',
 				RotationLevel = 0.3,
@@ -2147,19 +2173,28 @@ local function onInstance(v : Instance, alreadyExisted)
 	elseif c == "ProximityPrompt" then
 		if pn == "ProxyPart" and p.Parent.ClassName == "Model" then
 			local model = p.Parent
+			
+			print(model:GetFullName())
+			
 			local name = model.Name
 			local nl = name:lower()
 			local it = (model:GetAttribute("InteractionType") or ""):lower()
 
-			if name == "Toilet" or name == "PakrourSuitTakeOff" or name == "ParkourSuitTakeOff" or name == "Dryer" or nl == "highlight" or nl == "tripwire" or nl:match("generator") or it:match("chest") or it:match("box") or it:match("crate") or nl:match("bed") then return end
+			if alreadyDone[model] or name == "Toilet" or name == "PakrourSuitTakeOff" or name == "ParkourSuitTakeOff" or name == "Dryer" or nl == "highlight" or nl == "tripwire" or nl:match("generator") or it:match("chest") or it:match("box") or it:match("crate") or nl:match("bed") then return end
+			alreadyDone[model] = true
 
 			local isPassword = name:match("Password")
 
-			local amount = model:GetAttribute("Amount")
+			local ammoAmount = model:GetAttribute("AmmoAmount")
+			local amount = model:GetAttribute("Amount") or ammoAmount
 			local type = amount and "Currency" or (name:match("Key") or isPassword) and "Keycard" or name ~= "Model" and itemsRFolder:FindFirstChild(name, true) and "Item" or "Interactable" 
 
 			if type == "Currency" then
-				esp.new(p, {
+				esp.new(p, ammoAmount and {
+					Highlight = false,
+					Text = amount,
+					RotationLevel = (amount - 1) / 9
+				} or {
 					Highlight = false,
 					Text = "$" .. amount,
 					RotationLevel = (amount - 5) / 70
@@ -2242,17 +2277,6 @@ local function onInstance(v : Instance, alreadyExisted)
 end
 
 spawn(function()
-	local e = eventsRFolder.CurrentRoomNumber
-	roomNum = e:InvokeServer()
-
-	print(fire.ping)
-	while not window.Closed do
-		ping = fire.ping
-		wait()
-	end
-end)
-
-spawn(function()
 	repeat wait() until roomNum ~= -1 or window.Closed
 	if window.Closed then return end
 
@@ -2262,3 +2286,36 @@ spawn(function()
 
 	cons[#cons + 1] = workspace.DescendantAdded:Connect(onInstance)
 end)
+
+if rstorage:FindFirstChild("ZombiesRemaining") then
+	roomNum = 0
+	
+	while not window.Closed do
+		ping = fire.ping
+		wait()
+	end
+else
+	local con; con = rstorage.ChildAdded:Connect(function(v)
+		if v.Name == "ZombiesRemaining" then
+			roomNum = 0
+			con:Disconnect()
+			
+			while not window.Closed do
+				ping = fire.ping
+				wait()
+			end
+		end
+	end)
+	
+	cons[#cons + 1] = con
+	
+	spawn(function()
+		local e = eventsRFolder.CurrentRoomNumber
+		roomNum = e:InvokeServer()
+
+		while con.Connected and not window.Closed do
+			ping = fire.ping
+			wait()
+		end
+	end)
+end
