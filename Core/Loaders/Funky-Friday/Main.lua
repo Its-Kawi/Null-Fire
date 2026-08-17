@@ -207,18 +207,20 @@ local function lerp(a, b, c)
 	return a + (b - a) * c
 end
 
+local max = math.max
 local lkps = autoplaySettings:AddSlider("LK", {
 	Text = "Legit KPS (per key)",
-	Min = 2,
-	Max = 19,
+	Min = 0,
+	Max = 40,
 	Step = 0.1,
 	Value = 9,
 	Format = function(self)
 		local val = self.Value
-		return (val >= 3 and val <= 18 and clamp(val, 4, 17) or "inf") .. " KPS"
+		return (val >= 3 and max(val, 4) or "inf") .. " KPS"
 	end,
 	Callback = refresh,
-	AllowSetValue = true
+	AllowSetValue = true,
+	BypassSetValue = true
 })
 
 local legacy = autoplayTab:AddRightGroupbox("LS", { Text = "Legacy Settings" })
@@ -353,7 +355,7 @@ re = function()
 		local kps = lib.Display.KPS
 		
 		local lkps = lkps.Value
-		local maxLegitKPS = lkps >= 3 and lkps <= 18 and clamp(lkps, 4, 17) or 1 / 0
+		local maxLegitKPS = lkps >= 3 and max(lkps, 4) or 1 / 0
 		
 		local div = val <= 50 and val / 50 or kps > (maxLegitKPS - 2) and legit and lerp((val - 50) / 50, 0, round((kps - (maxLegitKPS - 2)) / 25)) or (val - 50) / 50
 		
