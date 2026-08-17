@@ -216,7 +216,7 @@ local lkps = autoplaySettings:AddSlider("LK", {
 	Value = 9,
 	Format = function(self)
 		local val = self.Value
-		return (val >= 3 and max(val, 4) or "inf") .. " KPS"
+		return (val >= 1 and max(val, 4) or "inf") .. " KPS"
 	end,
 	Callback = refresh,
 	AllowSetValue = true,
@@ -355,7 +355,7 @@ re = function()
 		local kps = lib.Display.KPS
 		
 		local lkps = lkps.Value
-		local maxLegitKPS = lkps >= 3 and max(lkps, 4) or 1 / 0
+		local maxLegitKPS = lkps >= 1 and max(lkps, 4) or 1 / 0
 		
 		local div = val <= 50 and val / 50 or kps > (maxLegitKPS - 2) and legit and lerp((val - 50) / 50, 0, round((kps - (maxLegitKPS - 2)) / 25)) or (val - 50) / 50
 		
