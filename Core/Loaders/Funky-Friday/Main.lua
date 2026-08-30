@@ -207,15 +207,20 @@ local function lerp(a, b, c)
 	return a + (b - a) * c
 end
 
+local KPSLimit = Vector2.new(4, 50)
+local diff = math.abs(KPSLimit.X - KPSLimit.Y)
+local diffPower = 10
+local KPSLimitMin = Vector2.new(round(KPSLimit.X - (diff / diffPower)), round(KPSLimit.Y - (diff / diffPower)))
+
 local lkps = autoplaySettings:AddSlider("LK", {
 	Text = "Legit KPS (per key)",
-	Min = 2,
-	Max = 19,
+	Min = KPSLimitMin.X - 1,
+	Max = KPSLimit.Y + 1,
 	Step = 0.1,
 	Value = 9,
 	Format = function(self)
 		local val = self.Value
-		return (val >= 3 and val <= 18 and self:FixNum(clamp(val, 4, 17)) or "inf") .. " KPS"
+		return (val >= KPSLimitMin.X and val <= KPSLimitMin.Y and self:FixNum(clamp(val, KPSLimit.X, KPSLimit.Y)) or "inf") .. " KPS"
 	end,
 	Callback = refresh,
 	AllowSetValue = true
@@ -353,25 +358,16 @@ re = function()
 		local kps = lib.Display.KPS
 		
 		local lkps = lkps.Value
-		local maxLegitKPS = lkps >= 3 and lkps <= 18 and clamp(lkps, 4, 17) or 1 / 0
+		local maxLegitKPS = lkps >= KPSLimitMin.X and lkps <= KPSLimitMin.Y and clamp(lkps, KPSLimit.X, KPSLimit.Y) or 1 / 0
 		
-		local div = val <= 50 and val / 50 or kps > (maxLegitKPS - 2) and legit and lerp((val - 50) / 50, 0, round((kps - (maxLegitKPS - 2)) / 25)) or (val - 50) / 50
+		local vlq50 = val <= 50
+		local div = vlq50 and val / 50 or kps > (maxLegitKPS - 2) and legit and lerp((val - 50) / 50, 0, round((kps - (maxLegitKPS - 2)) / 25)) or (val - 50) / 50
 		
-		for i, v in (val <= 50 and {
-			Sick = lerp(50, 90, div),
-			Good = lerp(50, 60, div),
-			Ok = lerp(40, 25, div),
-			Bad = lerp(30, 5, div),
-			Miss = lerp(20, 1, div)
-		} or {
-			Sick = lerp(90, 100, div),
-			Good = lerp(60, 0, div),
-			Ok = lerp(25, 0, div),
-			Bad = lerp(5, 0, div),
-			Miss = lerp(1, 0, div)
-		}) do
-			lib.Chances[i] = v
-		end
+		lib.Chances.Sick = vlq50 and lerp(50, 90, div) or lerp(90, 100, div)
+		lib.Chances.Good = vlq50 and lerp(50, 60, div) or lerp(60, 0, div)
+		lib.Chances.Ok = vlq50 and lerp(40, 25, div) or lerp(25, 0, div)
+		lib.Chances.Bad = vlq50 and lerp(30, 5, div) or lerp(5, 0, div)
+		lib.Chances.Miss = vlq50 and lerp(20, 1, div) or lerp(1, 0, div)
 
 		lib.KPS.Global = (legit and maxLegitKPS - 2 or 0) * 10
 		lib.KPS.PerKey = legit and maxLegitKPS + 1 or 0
@@ -395,4 +391,4 @@ re = function()
 end
 
 re()
-cons[#cons + 1] = game:GetService("RunService").Stepped:Connect(re)
+-- cons[#cons + 1] = game:GetService("RunService").Stepped:Connect(re)
