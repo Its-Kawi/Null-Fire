@@ -3,7 +3,7 @@
 -- By Kawi
 
 local settings = {
-	Version = "2.1", -- autoplayer version
+	Version = "2.11", -- autoplayer version
 
 	Author = {
 		DiscordServer = "https://discord.gg/4bexJD6WVT",
@@ -477,8 +477,7 @@ local function tryHitLane(laneIndex, duration, skipWait)
 	local current = tick()
 	local k = settings.KPS
 
-	if (perLaneKPS[laneIndex] or 0) <= round(kpsK / 1.2) and current - (kpsBuffers[laneIndex] or 0) < 1 / kpsK or kpsG < KPS then return false end
-
+	if (perLaneKPS[laneIndex] or 0) > round(kpsK / 2.5) or 1 / kpsK > current - (kpsBuffers[laneIndex] or 0) or KPS > kpsG then return false end
 	kpsBuffers[laneIndex] = current
 
 	if skipWait then
