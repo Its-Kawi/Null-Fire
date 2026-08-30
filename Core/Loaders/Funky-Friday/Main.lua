@@ -11,6 +11,8 @@ esp:InitClass("Inactive Stages", { Color = Color3.fromRGB(85, 170, 127) })
 
 window = window(cons, ...)
 
+if true then return end
+
 local function isBuzyStage(stage)
 	if stage:GetAttribute("ActiveGame") then return true end
 	
@@ -71,13 +73,13 @@ autoplay:AddToggle("C", {
 })
 
 local svd = autoplay:AddToggle("S", {
-	Text = "Enable SV Detection",
+	Text = "SV Mode",
 	Value = -- lib.SVEnabled,
 		false,
-	Tooltip = "CURRENTLY THAT FEATURE IS BROKEN, ENABLE IT ONLY WHEN YOU PLAY SV SONGS",
+	Tooltip = "Turn that feature on ONLY WHEN YOU HAVE OVER 20 FPS and if you're playing an SV song\nAutomatic SV detection is not implemented yet!",
 	Callback = function(val)
 		lib.SVEnabled = val
-		window:Notification({ Title = "SV Detection", Text = "CURRENTLY THAT FEATURE IS BROKEN, ENABLE IT ONLY WHEN YOU PLAY SV SONGS" })
+		window:Notification({ Title = "SV Mode", Text = "Turn that feature on ONLY WHEN YOU HAVE OVER 20 FPS and if you're playing an SV song\nAutomatic SV detection is not implemented yet!" })
 	end
 })
 
@@ -207,20 +209,18 @@ local function lerp(a, b, c)
 	return a + (b - a) * c
 end
 
-local max = math.max
 local lkps = autoplaySettings:AddSlider("LK", {
 	Text = "Legit KPS (per key)",
-	Min = 0,
-	Max = 40,
+	Min = 2,
+	Max = 19,
 	Step = 0.1,
 	Value = 9,
 	Format = function(self)
 		local val = self.Value
-		return (val >= 1 and max(val, 4) or "inf") .. " KPS"
+		return (val >= 3 and val <= 18 and clamp(val, 4, 17) or "inf") .. " KPS"
 	end,
 	Callback = refresh,
-	AllowSetValue = true,
-	BypassSetValue = true
+	AllowSetValue = true
 })
 
 local legacy = autoplayTab:AddRightGroupbox("LS", { Text = "Legacy Settings" })
@@ -355,7 +355,7 @@ re = function()
 		local kps = lib.Display.KPS
 		
 		local lkps = lkps.Value
-		local maxLegitKPS = lkps >= 1 and max(lkps, 4) or 1 / 0
+		local maxLegitKPS = lkps >= 3 and lkps <= 18 and clamp(lkps, 4, 17) or 1 / 0
 		
 		local div = val <= 50 and val / 50 or kps > (maxLegitKPS - 2) and legit and lerp((val - 50) / 50, 0, round((kps - (maxLegitKPS - 2)) / 25)) or (val - 50) / 50
 		
