@@ -215,7 +215,7 @@ local lkps = autoplaySettings:AddSlider("LK", {
 	Value = 9,
 	Format = function(self)
 		local val = self.Value
-		return (val >= 3 and val <= 18 and clamp(val, 4, 17) or "inf") .. " KPS"
+		return (val >= 3 and val <= 18 and self:FixNum(clamp(val, 4, 17)) or "inf") .. " KPS"
 	end,
 	Callback = refresh,
 	AllowSetValue = true
