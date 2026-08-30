@@ -3,7 +3,7 @@
 -- By Kawi
 
 local settings = {
-	Version = "2.0", -- autoplayer version
+	Version = "2.1", -- autoplayer version
 
 	Author = {
 		DiscordServer = "https://discord.gg/4bexJD6WVT",
@@ -336,12 +336,13 @@ end
 end
 
 local inputs = { }
+local tempConns = { }
 local vsrgConnection, vsrgConn2
 
 local scr = Enum.InputBindingType.Scriptable
 local inpFire
 
-local function onInput(v)
+local onInput; function onInput(v, overwrite)
 	local input
 	local laneNum = tonumber(v.Name:sub(5))
 	local start = tick()
@@ -363,8 +364,23 @@ local function onInput(v)
 
 	if not input then return end
 	input.Type = scr
+	
+	if not overwrite then
+		tempConns[#tempConns + 1] = input:GetPropertyChangedSignal("Type"):Connect(function()
+			input.Type = scr
+		end)
+		
+		local lastRefresh = 0
+		tempConns[#tempConns + 1] = v.ChildAdded:Connect(function()
+			local ct = tick()
+			if ct - lastRefresh > 0.02 then
+				lastRefresh = ct
+				onInput(v, true)
+			end
+		end)
+	end
 
-	warn("INPUT", v:GetFullName(), "BEEN HOOKED")
+	warn("INPUT", v:GetFullName(), "HOOK")
 
 	inputs[laneNum] = input
 	inpFire = input.Fire
@@ -375,6 +391,12 @@ local function hookInputs(vsrgContext)
 
 	vsrgConnection = vsrgContext:GetPropertyChangedSignal("Parent"):Connect(function()
 		if not vsrgContext.Parent then
+			for _, v in tempConns do
+				if v.Connected then
+					v:Disconnect()
+				end
+			end
+			
 			inputs = { }
 			vsrgConnection:Disconnect()
 			vsrgConn2:Disconnect()
@@ -819,6 +841,7 @@ local re = rs.RenderStepped
 local ticks = 0
 local lastPerf = notesperf
 
+local alwaysSV = true
 local modChart = false
 local isSV = false
 local doSV = false
@@ -859,7 +882,7 @@ spawn(function()
 		end
 
 		sve = settings.SVEnabled
-		doSV = actions and actions[1] and actions[2] or not actions and isSV and sve
+		doSV = actions and actions[1] and actions[2] or not actions and (isSV or alwaysSV) and sve
 		ch = newChances
 		ho = actions and actions[3] / 1000 or settings.HitOffset
 		spr = settings.Spray
@@ -1463,7 +1486,7 @@ local function onWindow(window)
 end
 
 local function vf(ch)
-	if ch.ClassName == "InputContext" or ch.Name == "VSRGContext" then
+	if ch.ClassName == "InputContext" then
 		hookInputs(ch)
 	elseif ch.Name == "Window" and ch:WaitForChild("Game", 1) and ch.Game:WaitForChild("Fields", 1) then
 		onWindow(ch)
