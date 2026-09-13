@@ -2,18 +2,21 @@
     "NDS": {
         "Name": "Natural Disaster Survival",
         "Works": true,
+        "Status": 0,
 
         "Games": [ 189707 ]
     },
     "Funky-Friday": {
         "Name": "Funky Friday",
         "Works": true,
+        "Status": 0,
 
         "Games": [ 2404080894 ]
     },
     "Pressure": {
         "Name": "Pressure",
         "Works": true,
+        "Status": 0,
 
         "Games": [ 4367208330 ]
     }
