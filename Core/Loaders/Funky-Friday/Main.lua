@@ -61,6 +61,16 @@ autoplay:AddToggle("E", {
 	end
 })
 
+autoplay:AddToggle("PKM", {
+	Text = "Key Press Mode",
+	Tooltip = "Uses keypress function instead of firesignal. Key Press signals allows some external programms to detect key presses\n<b>Warning:</b> on some executors this could not work!\nThat feature greatly decreases performance on spammy songs\nOnly turn on that function when needed.",
+	Value = false,
+	Disabled = (getfenv().keypress == nil and getfenv().key_press == nil) or (getfenv().keyrelease == nil and getfenv().key_release == nil),
+	Callback = function(val)
+		lib.PressKeyMode = val
+	end
+})
+
 autoplay:AddToggle("C", {
 	Text = "Copy Enemy Notes",
 	Tooltip = "When your lane has no arrows, it autoplays enemy's notes",
@@ -210,12 +220,12 @@ end
 local KPSLimit = Vector2.new(4, 50)
 local diff = math.abs(KPSLimit.X - KPSLimit.Y)
 local diffPower = 10
-local KPSLimitMin = Vector2.new(round(KPSLimit.X - (diff / diffPower)), round(KPSLimit.Y - (diff / diffPower)))
+local KPSLimitMin = Vector2.new(round(KPSLimit.X - (diff / diffPower)), round(KPSLimit.Y + (diff / diffPower)))
 
 local lkps = autoplaySettings:AddSlider("LK", {
 	Text = "Legit KPS (per key)",
 	Min = KPSLimitMin.X - 1,
-	Max = KPSLimit.Y + 1,
+	Max = KPSLimitMin.Y + 1,
 	Step = 0.1,
 	Value = 9,
 	Format = function(self)
