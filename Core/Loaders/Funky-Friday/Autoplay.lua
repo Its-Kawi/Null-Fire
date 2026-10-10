@@ -3,7 +3,7 @@
 -- By Kawi
 
 local settings = {
-	Version = "2.13", -- autoplayer version
+	Version = "2.131", -- autoplayer version
 
 	Author = {
 		DiscordServer = "https://discord.gg/4bexJD6WVT",
@@ -112,8 +112,6 @@ end
 
 local GITHUB = "https://raw.githubusercontent.com/Its-Kawi/"
 local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local url = GITHUB .. "Utilities/refs/heads/main/Utility/Main.lua" local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or getfenv().request and getfenv().request({ Url = url, Method = "GET" }).Body or game:HttpGet(url))() end)()
-
-warn(key, "READY")
 
 if global[key] then
 	return global[key]
@@ -336,7 +334,6 @@ end
 		test[0] = false
 		
 		settings.FrameworkConnected = true
-		warn("FRAMEWORK CONNECTED")
 	end)
 end
 
@@ -384,8 +381,6 @@ local onInput; function onInput(v, overwrite)
 			end
 		end)
 	end
-
-	warn("INPUT", v:GetFullName(), "HOOK")
 
 	inputs[laneNum] = input
 	inpFire = input.Fire
