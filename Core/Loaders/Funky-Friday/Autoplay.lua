@@ -3,7 +3,7 @@
 -- By Kawi
 
 local settings = {
-	Version = "2.11", -- autoplayer version
+	Version = "2.13", -- autoplayer version
 
 	Author = {
 		DiscordServer = "https://discord.gg/4bexJD6WVT",
@@ -15,6 +15,7 @@ local settings = {
 	HitOffset = 0,
 
 	SVEnabled = false,
+	PressKeyMode = false,
 	
 	FrameworkConnected = false, -- read only
 
@@ -143,6 +144,7 @@ local pgui = plr:WaitForChild("PlayerGui")
 local tick = tick
 local defer = task.defer
 local spawn = task.spawn
+local delay = task.delay
 local _wait = task.wait
 local pcall = pcall
 local max = math.max
@@ -159,6 +161,8 @@ local abs = math.abs
 local v2 = vector.create
 local round = math.round
 local clamp = math.clamp
+local keypress = getfenv().keypress or getfenv().key_press
+local keyrelease = getfenv().keyrelease or getfenv().key_release
 local run_on_actor = getfenv().run_on_actor
 
 local display = settings.Display
@@ -282,7 +286,7 @@ if run_on_actor then
 		
 		spawn(run_on_actor, plr:WaitForChild("PlayerScripts"):WaitForChild("ClientActor"), [==[
 local c = ...
-local renv = getrenv and getrenv()
+local renv = getrenv and getrenv() or getfenv()
 local wait = task.wait
 
 local function loadFail(reason)
@@ -332,6 +336,7 @@ end
 		test[0] = false
 		
 		settings.FrameworkConnected = true
+		warn("FRAMEWORK CONNECTED")
 	end)
 end
 
@@ -411,16 +416,139 @@ local function hookInputs(vsrgContext)
 	vsrgConn2 = vsrgContext.ChildAdded:Connect(onInput)
 end
 
-local fireLane
-function fireLane(laneIndex, state)
+local kbVals = { }
+local kbs = { }
+local function getUnrepeated(data)
+	local n = #data
+	local assignment = { }
+	local used = { }
+
+	local sortedIndices = { }
+	for i = 1, n do sortedIndices[i] = i end
+
+	sort(sortedIndices, function(a, b) return #data[a] < #data[b] end)
+
+	local backtrack; backtrack = function(idx)
+		if idx > n then return true end
+
+		local setIdx = sortedIndices[idx]
+		local candidates = { }
+
+		for _, val in ipairs(data[setIdx]) do
+			if not used[val] then
+				insert(candidates, val)
+			end
+		end
+
+		sort(candidates)
+
+		for _, val in ipairs(candidates) do
+			assignment[setIdx] = val
+			used[val] = true
+
+			if backtrack(idx + 1) then
+				return true
+			end
+
+			used[val] = nil
+			assignment[setIdx] = nil
+		end
+
+		return false
+	end
+
+	if backtrack(1) then
+		local result = { }
+		for i = 1, n do result[i] = assignment[i] end
+
+		return result
+	end
+
+	return false
+end
+
+local _fireLane
+function _fireLane(laneIndex, state)
 	local inp = inputs[laneIndex]
 	if not inp then return end
 
 	local s, e = pcall(inpFire, inp, state)
 	if not s then
 		input.Type = scr
-		fireLane(laneIndex, state)
+		_fireLane(laneIndex, state)
 	end
+end
+
+local guiServ = game:GetService("GuiService")
+local uis = game:GetService("UserInputService")
+local escOpen, buzy = guiServ.MenuIsOpen, uis:GetFocusedTextBox() ~= nil
+
+guiServ.MenuClosed:Connect(function()
+	escOpen = false
+end)
+
+guiServ.MenuOpened:Connect(function()
+	escOpen = true
+end)
+
+uis.TextBoxFocused:Connect(function(tb)
+	for i = 1, 3 do
+		buzy = true
+		wait()
+	end
+end)
+
+uis.TextBoxFocusReleased:Connect(function()
+	wait()
+	buzy = false
+end)
+
+local keyEnums = util:Keys()
+local _keyPressLane
+function _keyPressLane(laneIndex, state)
+	if escOpen or buzy then
+		return _fireLane(laneIndex, state)
+	end
+	
+	local kb = kbs[laneIndex]
+	if not kb then return end
+	
+	kb = keyEnums[kb]
+	if not kb then
+		return _fireLane(laneIndex, state)
+	end
+	
+	if state then
+		keypress(kb)
+	else
+		keyrelease(kb)
+	end
+end
+
+local mode = false
+local function fireLane(...)
+	if mode then
+		_keyPressLane(...)
+	else
+		_fireLane(...)
+	end
+end
+
+local kbsRefreshing = false
+local ekc = Enum.KeyCode
+
+local function refreshKbs()
+	wait()
+	if kbsRefreshing then return end
+	
+	kbsRefreshing = true
+	kbs = getUnrepeated(kbVals)
+	for i, v in kbs do
+		kbs[i] = ekc:FromName(v)
+	end
+	
+	wait()
+	kbsRefreshing = false
 end
 
 local laneStates = { }
@@ -742,6 +870,23 @@ local function onNote(note, data, sharedData, isNew, isMine)
 	end
 end
 
+local function labelAdded(laneNum, label, cons)
+	local textL = label:WaitForChild("Text", 9e9)
+	kbVals[laneNum] = kbVals[laneNum] or { }
+
+	local myIdx = #kbVals[laneNum] + 1
+	kbVals[laneNum][myIdx] = textL.Text
+
+	cons[#cons + 1] = textL:GetPropertyChangedSignal("Text"):Connect(function()
+		if textL.TextTransparency >= 0.95 then return end
+		
+		kbVals[laneNum][myIdx] = textL.Text
+		refreshKbs()
+	end)
+
+	refreshKbs()
+end
+
 local function onLane(lane, data, sharedData, isMine)
 	local laneNum = tonumber(lane.Name:sub(5))
 	if not laneNum then return end
@@ -775,13 +920,27 @@ local function onLane(lane, data, sharedData, isMine)
 		myData.IsDownScroll = isDownS(myData)
 		sortLane(myData)
 	end
-
-	local noteAddedCon = notes.ChildAdded:Connect(function(v)
+	
+	local cons = { }
+	cons[#cons + 1] = notes.ChildAdded:Connect(function(v)
 		onNote(v, myData, sharedData, true, isMine)
 	end)
+	
+	local labels = lane:WaitForChild("Labels", 9e9)
+	for i, v in labels:GetChildren() do
+		spawn(labelAdded, laneNum, v, cons)
+	end
+
+	cons[#cons + 1] = labels.ChildAdded:Connect(function(v)
+		spawn(labelAdded, laneNum, v, cons)
+	end)
+	
+	delay(0.1, refreshKbs)
 
 	sharedData.StoppedWorking:Wait()
-	noteAddedCon:Disconnect()
+	for i, v in cons do
+		v:Disconnect()
+	end
 end
 
 local function onField(field, myData, sharedData, isMine)
@@ -879,6 +1038,8 @@ spawn(function()
 		if onlySick then
 			newChances.Sick = nil
 		end
+		
+		mode = keypress and keyrelease and settings.PressKeyMode
 
 		sve = settings.SVEnabled
 		doSV = actions and actions[1] and actions[2] or not actions and (isSV or alwaysSV) and sve
@@ -1289,6 +1450,8 @@ local function resetState(sharedData)
 	isSV = false
 	modChart = false
 	total = 0
+	kbs = { }
+	kbVals = { }
 
 	for _, lane in display.Lanes do
 		for i in lane do
@@ -1404,6 +1567,7 @@ local function onWindow(window)
 		Window = window
 	}
 
+	songStarted:Fire(sharedData)
 	sharedData.StoppedWorking:Once(function()
 		songStopped:Fire(sharedData)
 	end)
@@ -1417,8 +1581,6 @@ local function onWindow(window)
 			spawn(onField, obj, sharedData.Fields[i], sharedData, i == side)
 		end
 	end
-
-	songStarted:Fire(sharedData)
 
 	while window.Parent do
 		local needsFlush = false
