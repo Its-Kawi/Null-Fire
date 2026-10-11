@@ -3,7 +3,7 @@
 -- By Kawi
 
 local settings = {
-	Version = "2.131", -- autoplayer version
+	Version = "2.14", -- autoplayer version
 
 	Author = {
 		DiscordServer = "https://discord.gg/4bexJD6WVT",
@@ -477,6 +477,15 @@ end
 local guiServ = game:GetService("GuiService")
 local uis = game:GetService("UserInputService")
 local escOpen, buzy = guiServ.MenuIsOpen, uis:GetFocusedTextBox() ~= nil
+local onWindow = (getfenv().isrbxactive or getfenv().is_rbx_active or function() return true end)()
+
+uis.WindowFocused:Connect(function()
+	onWindow = true
+end)
+
+uis.WindowFocusReleased:Connect(function()
+	onWindow = false
+end)
 
 guiServ.MenuClosed:Connect(function()
 	escOpen = false
@@ -487,28 +496,26 @@ guiServ.MenuOpened:Connect(function()
 end)
 
 uis.TextBoxFocused:Connect(function(tb)
-	for i = 1, 3 do
-		buzy = true
-		wait()
-	end
+	wait()
+	buzy = true
 end)
 
 uis.TextBoxFocusReleased:Connect(function()
-	wait()
 	buzy = false
 end)
 
 local keyEnums = util:Keys()
 local _keyPressLane
 function _keyPressLane(laneIndex, state)
-	if escOpen or buzy then
+	if escOpen or buzy or not onWindow then
 		return _fireLane(laneIndex, state)
 	end
 	
 	local kb = kbs[laneIndex]
 	if not kb then return end
-	
+
 	kb = keyEnums[kb]
+	
 	if not kb then
 		return _fireLane(laneIndex, state)
 	end
