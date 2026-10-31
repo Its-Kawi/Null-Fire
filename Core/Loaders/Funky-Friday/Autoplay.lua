@@ -3,7 +3,7 @@
 -- By Kawi
 
 local settings = {
-	Version = "2.14", -- autoplayer version
+	Version = "2.15", -- autoplayer version
 
 	Author = {
 		DiscordServer = "https://discord.gg/4bexJD6WVT",
@@ -655,7 +655,7 @@ end
 
 local rng = random()
 
-local badNoteAssets = { "rbxassetid://103483801062498", "rbxassetid://88530467220950", "rbxassetid://109130876544260", "rbxassetid://120222801097284", "rbxassetid://101951481332606" }
+local badNoteAssets = { "rbxassetid://103483801062498", "rbxassetid://88530467220950", "rbxassetid://109130876544260", "rbxassetid://120222801097284", "rbxassetid://101951481332606", "" }
 local black = c3n()
 local ch = settings.Chances
 
@@ -793,7 +793,9 @@ local hitOffset02 = offsetOffset * 2
 local rendered = 0
 local spr = settings.Spray
 
-local function onNote(note, data, sharedData, isNew, isMine)
+local side = "Left"
+local function onNote(note, data, sharedData, isNew, s)
+	local isMine = s == side
 	local sprite = note:WaitForChild("LayeredSprite"):WaitForChild("1")
 	local isBlack = sprite.ImageColor3 == black
 
@@ -804,7 +806,7 @@ local function onNote(note, data, sharedData, isNew, isMine)
 	sharedData[n] += 1
 	sharedData[n2] += isBlack and isMine and 1 or 0
 
-	local isGood = (not isBlack or sharedData[n2] / sharedData[n] > 0.75) and not find(badNoteAssets, sprite.Image)
+	local isGood = (not isBlack or sharedData[n2] / sharedData[n] > 0.75) and not find(badNoteAssets, (sprite.Image:gsub("[\n\r\f\t \0]", "")))
 	local toInsert
 	if isGood then
 		toInsert = data.Notes
@@ -889,7 +891,7 @@ local function labelAdded(laneNum, label, cons)
 	refreshKbs()
 end
 
-local function onLane(lane, data, sharedData, isMine)
+local function onLane(lane, data, sharedData, side)
 	local laneNum = tonumber(lane.Name:sub(5))
 	if not laneNum then return end
 
@@ -915,7 +917,7 @@ local function onLane(lane, data, sharedData, isMine)
 	if not sharedData.Working then return end
 
 	for i, v in notes:GetChildren() do
-		spawn(onNote, v, myData, sharedData, false, isMine)
+		spawn(onNote, v, myData, sharedData, false, side)
 	end
 
 	if #Notes > 0 then
@@ -925,7 +927,7 @@ local function onLane(lane, data, sharedData, isMine)
 	
 	local cons = { }
 	cons[#cons + 1] = notes.ChildAdded:Connect(function(v)
-		onNote(v, myData, sharedData, true, isMine)
+		onNote(v, myData, sharedData, true, side)
 	end)
 	
 	local labels = lane:WaitForChild("Labels", 9e9)
@@ -945,12 +947,12 @@ local function onLane(lane, data, sharedData, isMine)
 	end
 end
 
-local function onField(field, myData, sharedData, isMine)
+local function onField(field, myData, sharedData, side)
 	local lanes = field:WaitForChild("Inner")
 	if not sharedData.Working then return end
 
 	for i, v in lanes:GetChildren() do
-		spawn(onLane, v, myData, sharedData, isMine)
+		spawn(onLane, v, myData, sharedData, side)
 	end
 end
 
@@ -973,23 +975,6 @@ local function getClosest(toIterate)
 	return c, d
 end
 
-local function getMyStage()
-	if workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Stages") then
-		return getClosest(workspace.Map.Stages)
-	end
-end
-
-local function getMySide()
-	local stage = getMyStage()
-	if stage then
-		local node = getClosest(stage.Nodes)
-		if node then
-			return node.Name:sub(1, node.Name:find("_") - 1)
-		end
-	end
-end
-
-local side = getMySide() or "Left"
 local renderDelta = 0
 local fps = 0
 local estFps = 0
@@ -1020,7 +1005,6 @@ spawn(function()
 
 		ticks += 1
 
-		side = getMySide() or side
 		fps = 1 / renderDelta
 
 		estFps = append(fpsBuffer, fps, fps)
@@ -1371,6 +1355,12 @@ end)
 
 local function statsAdded(stats, cons)
 	if stats:FindFirstChild("Title") then return end
+	
+	cons[#cons + 1] = stats.Changed:Connect(function()
+		side = stats.Position.X.Scale < 0.5 and "Left" or "Right"
+	end)
+	
+	side = stats.Position.X.Scale < 0.5 and "Left" or "Right"
 
 	local row = stats:WaitForChild("Combo"):Clone()
 	local rows = { }
@@ -1580,7 +1570,7 @@ local function onWindow(window)
 			sharedData.StoppedWorking:Fire()
 			return
 		else
-			spawn(onField, obj, sharedData.Fields[i], sharedData, i == side)
+			spawn(onField, obj, sharedData.Fields[i], sharedData, i)
 		end
 	end
 
