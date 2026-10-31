@@ -70,6 +70,7 @@ autoplay:AddToggle("PKM", {
 		lib.PressKeyMode = val
 	end
 })
+autoplay:AddLabel("PKMWarning", { Text = 'Key Press Mode\n<b><font color="#FF3030">DO NOT ENABLE IT</font> WHEN NOT NEEDED, BECAUSE <font color="#FF3030">IT CAN CAUSE CRASHES ON SOME EXECUTORS</font></b>' })
 
 autoplay:AddToggle("C", {
 	Text = "Copy Enemy Notes",
