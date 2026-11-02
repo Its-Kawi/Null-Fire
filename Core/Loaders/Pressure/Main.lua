@@ -4,6 +4,13 @@ local GITHUB = "https://raw.githubusercontent.com/Its-Kawi/"
 local util = (getfenv().getgenv or function() return _G end)().QKUtil or (function() local url = GITHUB .. "Utilities/refs/heads/main/Utility/Main.lua" local rf, IF = getfenv().readfile or getfenv().read_file, getfenv().isfile or getfenv().is_file return loadstring(rf and IF and IF("QUtil/Utility.lua") and rf("QUtil/Utility.lua") or getfenv().request and getfenv().request({ Url = url, Method = "GET" }).Body or game:HttpGet(url))() end)()
 
 local window = util:NullFireWindow()
+local gpf = workspace:WaitForChild("GameplayFolder", 1)
+
+if not gpf then
+	util:UI():Notification({ Title = "Lobby not supported!", Text = "Please join the game first, lobby script is not supported!" })
+	return
+end
+
 local esp = util:ESP()
 local fire = util:Fire()
 local other = util:Other()
@@ -62,6 +69,18 @@ local values = {
 	Other = {
 		BetterDoors = false,
 		InfiniteOxygen = false,
+	},
+	
+	OpenDoor = {
+		AutoOpen = false,
+		UseCodeBreacher = false,
+		UseKeycards = false
+	},
+	
+	AutoPlay = {
+		PickCurrency = false,
+		Enabled = false,
+		Speed = 0
 	},
 
 	AutoPick = {
@@ -125,6 +144,8 @@ local random, round = math.random, math.round
 local v3 = vector.create
 local pcall = pcall
 local typeof = typeof
+local pack = table.pack
+local unpack = unpack or table.unpack
 local env = (getfenv().getgenv or getfenv)()
 
 local hookfunc, hookmeta = env.hookfunction, env.hookmetamethod
@@ -133,11 +154,10 @@ local hookmetamethod, hookfunction
 local hooksEnabled = false
 local namecall = env.getnamecallmethod
 
-local isObfuscated do local _p=newproxy(true)local _m=getmetatable(_p)_m.__namecall=function()return true;end;_m.__index=function()return pcall;end;isObfuscated=_p:_()~=true end
-local isLuaVM = isObfuscated
+local IS_LUA_VM = (function()local p=newproxy(true)local m=getmetatable(p)m.__namecall=function()return true;end;m.__index=function()return pcall;end;return p:_()~=true end)()
 local hooks = { }
 
-if hookfunc and hookmeta and namecall and not isLuaVM then
+if hookfunc and hookmeta and namecall and not IS_LUA_VM then
 	local test = function() return false end
 	local old = hookfunc(test, function() return true end)
 
@@ -155,7 +175,15 @@ if hooksEnabled then
 		local fc = function(self, ...) return b(self, old, ...) end
 		old = hookmeta(game, a, fc)
 
-		hooks[fc] = old
+		hooks[fc] = function(...)
+			local args = pack(...)
+			if typeof(args[1]) == "function" then -- fuck potassium
+				remove(args, 1)
+				args.n -= 1
+			end
+			
+			return old(unpack(args, 1, args.n))
+		end
 	end
 else
 	hookfunction = function() end
@@ -176,6 +204,8 @@ local eventsRFolder = rstorage:WaitForChild("Events")
 local assetsRFolder = rstorage:WaitForChild("Assets")
 local equipableItems = rstorage:WaitForChild("EquipableItems")
 local gameSettingsRFolder = rstorage:WaitForChild("GameSettings")
+
+local autoplayFunctions = { }
 
 local remoteHooks = {
 	AdBreak = { "ADs",
@@ -242,7 +272,6 @@ pcall(function()
 	end
 end)
 
-local pack, unpack = table.pack, unpack or table.unpack
 local function fireEvent(name, ...)
 	local ev = eventsRFolder:FindFirstChild(name)
 	if not ev then return end
@@ -269,12 +298,13 @@ end
 local nodeMonsterSpawned = event.new()
 local monsterSpawned = event.new()
 
-local roomsFolder = workspace:WaitForChild("GameplayFolder"):WaitForChild("Rooms")
+local roomsFolder = gpf:WaitForChild("Rooms")
 local allRooms = roomsFolder:GetChildren()
 local traversalOrder = { }
 local lastDoor = nil
 local lastRoom = nil
 local previousRoom = nil
+local currentRoom
 
 local clone = function(tbl)
 	local copy = { }
@@ -285,6 +315,11 @@ local clone = function(tbl)
 
 	return copy
 end
+
+local endingRoomNames = {
+	["ModifierEnding"] = true,
+	["SearchlightsEnding"] = true
+}
 
 if #allRooms > 0 then
 	local hasEntrances = { } -- true for ignoring invalid rooms
@@ -333,18 +368,19 @@ if #allRooms > 0 then
 
 			traversalOrder[door.Enter.Value] = i
 			current = door.Exit.Value
+			
+			if endingRoomNames[current.Name] then
+				break
+			end
 
 			i += 1
 		end
+		
+		currentRoom = current
 	end
 end
 
 local roomNum = -1
-
-local endingRoomNames = {
-	["ModifierEnding"] = true,
-	["SearchlightsEnding"] = true
-}
 
 local code = nil
 
@@ -390,7 +426,7 @@ end })
 gmFuncs[#gmFuncs + 1] = antiL:AddToggle("5", { Text = "Anti Monster Locker", Tooltip = "Aka. Anti Void Mass", Callback = function(val)
 	values.Anti.MonsterLocker = val
 end })
-antiL:AddToggle("6", { Text = "Anti Fake Door", Tooltip = "Aka. Anti Good People", Callback = function(val)
+gmFuncs[#gmFuncs + 1] = antiL:AddToggle("6", { Text = "Anti Fake Door", Tooltip = "Aka. Anti Good People", Callback = function(val)
 	values.Anti.GoodPeople = val
 end })
 gmFuncs[#gmFuncs + 1] = antiL:AddToggle("7", { Text = "Anti DiVine", Tooltip = "Deletes the guy who always touches grass", Callback = function(val)
@@ -560,6 +596,44 @@ gmFuncs[#gmFuncs + 1] = hiding:AddToggle("2", { Text = "Auto Hide Instant Telepo
 	values.Automation.InstantHide = val
 end })
 
+local autoPlay = automation:AddLeftGroupbox("AP", { Text = "Auto Play" })
+local oldValues = { }
+autoPlay:AddToggle("1", { Text = "Auto Play", Value = false, Callback = function(val)
+	values.AutoPlay.Enabled = val
+	if val then
+		for _, v in gmFuncs do
+			if not v.Disabled then
+				oldValues[v] = v.Value
+				v:Set(true)
+				v.Disabled = true
+			end
+		end
+
+		for i, v in autoplayFunctions do
+			if not i.Disabled then
+				oldValues[i] = i.Value
+				i:Set(v)
+				i.Disabled = true
+			end
+		end
+	else
+		for i, v in oldValues do
+			i.Disabled = false
+			i:Set(v)
+		end
+		
+		oldValues = { }
+	end
+end })
+
+autoPlay:AddCheckBox("2", { Text = "Pick Currency", Value = false, Callback = function(val)
+	values.AutoPlay.PickCurrency = val
+end })
+
+autoPlay:AddSlider("3", { Text = "Auto play tween speed", Value = 0, Min = 0, Max = 128, Callback = function(val)
+	values.AutoPlay.Speed = val
+end })
+
 hiding:AddToggle("3", { Text = "Use Lockers for Auto Hide", Value = false, Callback = function(val)
 	values.Other.UseLockers = val
 end, Visible = false })
@@ -568,9 +642,9 @@ hiding:AddToggle("4", { Text = "Teleport to Lockers", Value = false, Callback = 
 end, Visible = false })
 
 local looting = automation:AddRightGroupbox("L", { Text = "Functions" })
-looting:AddToggle("1", { Text = "Auto Loot", Value = false, Callback = function(val)
+autoplayFunctions[looting:AddToggle("1", { Text = "Auto Loot", Value = false, Callback = function(val)
 	values.AutoPick.Enabled = val
-end })
+end })] = true
 
 local valuesReformed = { }
 for i in values.AutoPick do
@@ -579,25 +653,25 @@ for i in values.AutoPick do
 	end
 end
 
-looting:AddDropdown("2", { Text = "Allowed Loot List", Values = valuesReformed, Multi = true, Callback = function(vals)
+autoplayFunctions[looting:AddDropdown("2", { Text = "Allowed Loot List", Values = valuesReformed, Multi = true, Callback = function(vals)
 	for i, v in vals do
 		values.AutoPick[i:gsub(" ", "")] = v
 	end
-end })
+end })] = 1
 
 looting:AddSeparator()
-looting:AddToggle("3", { Text = "Auto Pull Switches", Value = false, Callback = function(val)
+autoplayFunctions[looting:AddToggle("3", { Text = "Auto Pull Switches", Value = false, Callback = function(val)
 	values.Automation.PullSwitches = val
-end })
+end })] = true
 
 looting:AddHeader({ Text = "Pipe Puzzle" })
-looting:AddToggle("4", { Text = "Auto Find Solution", Value = false, Callback = function(val)
+autoplayFunctions[looting:AddToggle("4", { Text = "Auto Find Solution", Value = false, Callback = function(val)
 	values.Automation.SolvePipePuzzle = val
 	values.Debug.ShowPipePuzzle = val
-end })
-looting:AddToggle("5", { Text = "Auto Play Solution", Value = false, Callback = function(val)
+end })] = true
+autoplayFunctions[looting:AddToggle("5", { Text = "Auto Play Solution", Value = false, Callback = function(val)
 	values.Automation.PlaySolvedSolution = val
-end })
+end })] = true
 looting:AddSlider("6", { Text = "Maximum Pipe Puzzle FPS", Tooltip = "Start FPS is 120 and it glides to THAT value in 10 seconds\nThe less this value, the faster algoritm solves the puzzle", Value = pipes.EndFPS, Min = 0.1, Max = 30, Step = 0.1, --[[Format = function(self) return self:FixNum(self.Value) .. " FPS" end,]] Callback = function(val)
 	pipes.EndFPS = val
 end })
@@ -687,6 +761,13 @@ character:AddToggle("0", { Text = "Always in Parkour Mode", Callback = function(
 
 	if val then
 		while self.Value do
+			if char then
+				local hum = char:FindFirstChildOfClass("Humanoid")
+				if hum and hum.WalkSpeed <= 11 and hum.WalkSpeed > 0 then
+					pk.Stop()
+				end
+			end
+			
 			if not pk.State or pk.CausedBySPRINT then
 				pk.Start()
 			end
@@ -718,7 +799,7 @@ local fall = character:AddSlider("4", { Text = "Falling Speed", AllowSetValue = 
 
 character:AddSeparator()
 character:AddButton({ Text = "Reset Character", Tooltip = "Kills you", Callback = function()
-	if window:Notification({ Title = "Reset Character", Text = "Are you sure you wanna kill yourself?", HasButtons = true }) then
+	if window:SmartNotification({ Title = "Reset Character", Text = "Are you sure you wanna kill yourself?" }) then
 		fireEvent("LocalDamage", 9999, nil, nil, "Lopee", nil, false)
 	end
 end })
@@ -794,21 +875,29 @@ local pandeCircle, pandeMiddle do
 end
 
 local useful = visuals:AddLeftGroupbox("U", { Text = "Useful Visuals" })
-useful:AddToggle("I", { Text = "Fullbright", Tooltip = "Aka. See in dark", Value = false, Callback = function(val, self)
-	if not val then return end
+local fb = useful:AddSlider("FB", { Text = "Fullbright", Tooltip = "Aka. See in dark", Value = 0, Min = 0, Max = 100, Format = "%", Callback = function(val)
+	if val == 0 then
+		lighting.Ambient = Color3.new()
+		lighting.Brightness = 0
+	end
+end })
 
+spawn(function()
 	local w = rgb(150, 150, 150)
+	local b = rgb(0, 0, 0)
 
-	while self.Value and not window.Closed do
-		lighting.Ambient = w
-		lighting.Brightness = 1
+	while not window.Closed do
+		if fb.Value > 0 then
+			lighting.Ambient = b:Lerp(w, fb.Value / 100)
+			lighting.Brightness = fb.Value / 100
+		end
+		
 		wait()
 	end
 
 	lighting.Ambient = Color3.new()
 	lighting.Brightness = 0
-end })
-
+end)
 modifierOnly:AddToggle("N", { Text = "No Popups", Tooltip = "Modifier Only", Value = false, Callback = function(val)
 	values.Visual.NoPopups = val
 end })
@@ -850,6 +939,35 @@ local bruteforceStop = { }
 local unlocked = setmetatable({ }, { __mode = "k" })
 local buzy = false
 
+local currentTool = char:GetAttribute("ToolName")
+if currentTool == "nil" then
+	currentTool = nil
+end
+
+local function equip(toolName)
+	local equip = eventsRFolder:FindFirstChild("Equip")
+	if equip and toolName ~= currentTool then
+		currentTool = toolName
+		equip:FireServer(toolName)
+	end
+end
+
+local function unequip(toolName)
+	local unequip = eventsRFolder:FindFirstChild("Unequip")
+	if unequip then
+		currentTool = nil
+		unequip:FireServer(toolName)
+	end
+end
+
+local function activate(toolName, ...)
+	local activate = eventsRFolder:FindFirstChild("Activate")
+	if activate then
+		equip(toolName)
+		activate:FireServer(toolName, ...)
+	end
+end
+
 local teleportSlider = Instance.new("CFrameValue")
 local tpSliderTween : Tween = nil
 local ts = game:GetService("TweenService")
@@ -857,38 +975,43 @@ local ts = game:GetService("TweenService")
 local inf = 1 / 0
 local cfr = CFrame.new
 
-local teleport; teleport = function(target, slidingSpeed)
-	if not slidingSpeed or slidingSpeed == 0 or slidingSpeed == inf then
-		if typeof(target) == "Vector3" then target = cfr(target) end
+local function pivotTo(target)
+	char:PivotTo(target)
+	
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.AssemblyLinearVelocity = v3(0, 0, 0)
+	end
+end
 
-		char:PivotTo(target)
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			hrp.AssemblyLinearVelocity = v3(0, 0, 0)
-		end
+local teleport; teleport = function(target, slidingSpeed)
+	if typeof(target) == "Vector3" then target = cfr(target) end
+	
+	if not slidingSpeed or slidingSpeed == 0 or slidingSpeed == inf then
+		pivotTo(target)
 	else
 		if tpSliderTween then
 			tpSliderTween:Destroy()
+			tpSliderTween = nil
 		end
-
+		
+		teleportSlider.Value = char:GetPivot()
+		tpSliderTween = ts:Create(teleportSlider, TweenInfo.new((target.Position - char:GetPivot().Position).Magnitude / slidingSpeed, Enum.EasingStyle.Linear), { Value = target })
+		tpSliderTween:Play()
+		
 		tpSliderTween.Destroying:Once(function()
 			tpSliderTween:Pause()
 			tpSliderTween = nil
 		end)
-
-		teleportSlider.Value = char:GetPivot()
-		tpSliderTween = ts:Create(teleportSlider, TweenInfo.new((target.Position - char:GetPivot().Position).Magnitude / slidingSpeed, Enum.EasingStyle.Linear), { Value = target })
-		tpSliderTween:Play()
-
+		
 		tpSliderTween.Completed:Wait()
 		tpSliderTween:Destroy()
 
 		teleportSlider.Value = target
-
 	end
 end
 
-cons[#cons + 1] = teleportSlider.Changed:Connect(teleport)
+cons[#cons + 1] = teleportSlider.Changed:Connect(pivotTo)
 
 window.OnClose:Once(function()
 	if tpSliderTween then
@@ -922,6 +1045,9 @@ local bruteforceLock do
 	bruteforceLock = function(lock, tp)
 		if buzy then return "Already in process" end
 		if unlocked[lock] then return "Already unlocked" end
+		
+		unlocked[lock] = lock.Parent:FindFirstChild("OpenValue") and lock.Parent.OpenValue.Value or false
+		if unlocked[lock] then return "Already unlocked" end
 
 		local rf = lock:WaitForChild("RemoteFunction", ping + 0.1)
 		if not rf then return "Not bruteforceable" end
@@ -940,33 +1066,79 @@ local bruteforceLock do
 			buzy = false
 			return "Too far"
 		end
+		
+		local isMainDoor = lock.Parent.Parent == lastDoor
+		if isMainDoor then
+			if code then
+				wait(ping + 0.05)
+				if (lock:GetPivot().Position - spoofedCharPos.Position).Magnitude > bfd then
+					buzy = false
+					return "Too far"
+				end
+				
+				spawn(rf.InvokeServer, rf, code)
 
-		if lock.Parent.Parent == lastDoor and code then
-			spawn(rf.InvokeServer, rf, code)
-
-			buzy = false
-			return 2
-		else
-			for i = bruteforceStop[lock] or 0, 9999 do
-				spawn(rf.InvokeServer, rf, ("%04d"):format(i))
-
-				if i ~= 0 and i % bfs == 0 then
-					wait(ping)
-
-					if unlocking.Playing then
-						break
-					end
-
-					if tp and char then
-						teleport(lock:GetPivot())
-					end
-
+				buzy = false
+				return 2
+			end
+			
+			local function findItem(name)
+				local item = pfolder.Inventory:FindFirstChild(name)
+				if not item or item.Value <= 0 then
+					item = nil
+				end
+				
+				return item
+			end
+			
+			local keycard = values.OpenDoor.UseKeycards and (findItem("NormalKeyCard") or findItem("NormalKeyCardOld") or findItem("RidgeKeyCard")) or values.OpenDoor.UseCodeBreacher and findItem("CodeBreacher")
+			if keycard then
+				local pp = lock:FindFirstChildOfClass("ProximityPrompt")
+				if pp then
+					equip(keycard.Name)
+					
+					wait()
+					buzy = false
+					
 					if (lock:GetPivot().Position - spoofedCharPos.Position).Magnitude > bfd then
-						bruteforceStop[lock] = i - bfs
-						buzy = false
-
+						unequip(keycard.Name)
 						return "Too far"
 					end
+					
+					fpp(pp)
+					unlocked[lock] = true
+					
+					return 2
+				end
+			end
+		end
+
+		local idx = tonumber(lock.Parent:GetAttribute("MaxIndex")) or 4
+		if idx > 4 then
+			window:Notification({ Title = "Bruteforce", Text = "This lock has more than 4 digits so bruteforcing can take a while" })
+		end
+			
+		for i = bruteforceStop[lock] or 0, tonumber(("9"):rep(idx)) do
+			spawn(rf.InvokeServer, rf, ("%04d"):format(i))
+
+			if i ~= 0 and i % bfs == 0 then
+				wait(ping)
+
+				if unlocking.Playing then
+					break
+				end
+
+				if lock.Parent:FindFirstChild("OpenValue") and lock.Parent.OpenValue.Value then break end
+
+				if tp and char then
+					teleport(lock:GetPivot())
+				end
+
+				if (lock:GetPivot().Position - spoofedCharPos.Position).Magnitude > bfd then
+					bruteforceStop[lock] = i - bfs
+					buzy = false
+					
+					return "Too far"
 				end
 			end
 		end
@@ -978,27 +1150,7 @@ local bruteforceLock do
 	end
 end
 
-local doorInteracts = interact:AddRightGroupbox("D", { Text = "Doors" })
-doorInteracts:AddButton({ Text = "Bruteforce Closest Door Code", Callback = function()
-	local closest, dist = nil, math.huge
-	for i, v in tables.Bruteforceables do
-		local mag = (v:GetPivot().Position - spoofedCharPos.Position).Magnitude
-		if mag < dist then
-			closest, dist = v, mag
-		end
-	end
-
-	if closest then
-		local reason = bruteforceLock(closest)
-		if typeof(reason) == "string" then
-			window:Notification({ Title = "Bruteforce Failed", Text = reason })
-		elseif reason == 1 then
-			window:Notification({ Title = "Bruteforce Succeed", Text = "The door should open now.\nIt might take a bit, because your ping goes down and you need to wait for it to finish" })
-		end
-	end
-end })
-
-doorInteracts:AddButton({ Text = "Teleport to Last Door", Callback = function()
+local function teleportToDoor()
 	local pivot, root
 	if lastDoor then
 		pivot, root = getDoor(lastDoor)
@@ -1007,7 +1159,70 @@ doorInteracts:AddButton({ Text = "Teleport to Last Door", Callback = function()
 	if pivot then
 		teleport(pivot:GetPivot() - (root:GetPivot().XVector * 3))
 	else
+		return false
+	end
+end
+
+local function getClosest(list)
+	local closest, dist = nil, math.huge
+	for i, v in list do
+		local mag = ((v:IsA("ProximityPrompt") and v.Parent or v):GetPivot().Position - spoofedCharPos.Position).Magnitude
+		if mag < dist then
+			closest, dist = v, mag
+		end
+	end
+	
+	return closest, dist
+end
+
+local function tryBruteforce(teleport)
+	local closest = getClosest(tables.Bruteforceables)
+	if closest then
+		return bruteforceLock(closest, teleport)
+	end
+	
+	return 3
+end
+
+local function tpAndOpen()
+	if teleportToDoor() == nil and wait() and tryBruteforce() == 1 then
+		window:Notification({ Title = "Bruteforce Succeed", Text = "The door should open now.\nIt might take a bit, because your ping goes down and you need to wait for it to finish" })
+	end
+end
+
+local doorInteracts = interact:AddRightGroupbox("D", { Text = "Doors" })
+doorInteracts:AddHeader({ Text = "Quick Teleports" })
+doorInteracts:AddButton({ Text = "Bruteforce Closest Door Code", Callback = function()
+	local reason = tryBruteforce()
+	if typeof(reason) == "string" then
+		window:Notification({ Title = "Bruteforce Failed", Text = reason })
+	elseif reason == 1 then
+		window:Notification({ Title = "Bruteforce Succeed", Text = "The door should open now.\nIt might take a bit, because your ping goes down and you need to wait for it to finish" })
+	elseif reason == 3 then
+		window:Notification({ Title = "Bruteforce Failed", Text = "The closest door is not available" })
+	end
+end })
+
+doorInteracts:AddButton({ Text = "Teleport to Last Door", Callback = function()
+	local bool = teleportToDoor()
+	if bool == false then
 		window:Notification({ Title = "Teleport Failed", Text = "The Door is unavailable!" })
+	end
+end })
+
+doorInteracts:AddButton({ Text = "Teleport to Last Door and try opening it", Callback = tpAndOpen })
+doorInteracts:AddSeparator()
+doorInteracts:AddToggle({ Text = "Use Keycards to try opening the door", Callback = function(val)
+	values.OpenDoor.UseKeycards = val
+end }):Set(true)
+doorInteracts:AddToggle({ Text = "Use Code Breachers to try opening the door", Callback = function(val)
+	values.OpenDoor.UseCodeBreacher = val
+end }):Set(false)
+doorInteracts:AddHeader({ Text = "Automation" })
+doorInteracts:AddToggle("AO", { Text = "Auto try to open codelocks", Callback = function(val)
+	while val do
+		tryBruteforce(false)
+		wait()
 	end
 end })
 
@@ -1197,7 +1412,11 @@ cons[#cons + 1] = nodeMonsterSpawned:Connect(function(monster)
 		Highlight = false,
 		Text = name
 	}, "Node Monster")
-
+	
+	if name:match("irage") then
+		isDumbPande = true
+	end
+	
 	if not isDumbPande then
 		insert(nodeMonsters, monster)
 
@@ -1291,7 +1510,164 @@ local function isSafe(position)
 	return true
 end
 
+local autohiding = false
+local currentPuzzle, r
+local currentElevator
+
+do -- autoplay
+	local specialRooms = {
+		["ModifierEnding"] = function(r)
+			local int = r:FindFirstChild("Interactables")
+			if int then
+				local endMods = int:FindFirstChild("EndModifiers")
+				if endMods then
+					local hl = endMods:FindFirstChild("Highlight")
+					if hl then
+						local pp = hl:FindFirstChildOfClass("ProximityPrompt")
+						if pp then
+							spawn(teleport, endMods:GetPivot(), values.AutoPlay.Speed)
+							return fpp(pp)
+						end
+					end
+				end
+
+				endMods = int:FindFirstChild("EndRun")
+				if endMods then
+					local hl = endMods:FindFirstChild("Highlight")
+					if hl then
+						local pp = hl:FindFirstChildOfClass("ProximityPrompt")
+						if pp then
+							spawn(teleport, endMods:GetPivot(), values.AutoPlay.Speed)
+							return fpp(pp)
+						end
+					end
+				end
+			end
+		end,
+		["SearchlightsEnding"] = function(r)
+			local triggers = r:FindFirstChild("Triggers")
+			if not triggers then return end
+			
+			local function pressLever(n)
+				local l = typeof(n) == "Instance" and n or triggers:FindFirstChild(n)
+				if l then
+					local hl = l:FindFirstChild("Highlight")
+					if hl then
+						local pp = hl:FindFirstChildOfClass("ProximityPrompt")
+						if pp then
+							spawn(teleport, l:GetPivot(), values.AutoPlay.Speed)
+							fpp(pp)
+							
+							return false
+						end
+					end
+				end
+				
+				return true
+			end
+			
+			local ti = r:FindFirstChild("TouchInterest", true)
+			if ti then
+				return spawn(teleport, ti.Parent:GetPivot(), values.AutoPlay.Speed)
+			end
+			
+			local levers = 0
+			for i, v in triggers:GetChildren() do
+				if v.Name:match("Lever") then
+					levers += 1
+				end
+			end
+			
+			for i = 1, levers do
+				if not pressLever("Lever" .. i) then
+					return
+				end
+			end
+			
+			local l2 = r:FindFirstChild("Lever2")
+			if l2 then
+				if not pressLever(l2) then
+					return
+				end
+			end
+			
+			for i, v in r:GetChildren() do
+				if v.Name:match("rigger") then
+					ti = v:FindFirstChild("TouchInterest", true)
+					if ti then
+						return spawn(teleport, ti.Parent:GetPivot(), values.AutoPlay.Speed)
+					end
+				end
+			end
+			
+			local finalSub = r:FindFirstChild("ExitSubmarine")
+			if finalSub then
+				local pp = finalSub:FindFirstChild("ProximityPrompt", true)
+				if pp then
+					spawn(teleport, pp.Parent:GetPivot(), values.AutoPlay.Speed)
+					return fpp(pp)
+				end
+			end
+		end,
+	}
+	
+	local function autoplayLoop()
+		if values.AutoPlay.PickCurrency then
+			local first = getClosest(cleanupTable(tables.Currency))
+			if first then
+				return spawn(teleport, first.Parent:GetPivot(), values.AutoPlay.Speed)
+			end
+		end
+		
+		local gens = cleanupTable(tables.Generators)
+		local first = #gens > 1 and getClosest(gens)
+		if first then
+			spawn(teleport, first:GetPivot(), values.AutoPlay.Speed)
+			return fixGenerator(first)
+		end
+		
+		if currentPuzzle then
+			return --spawn(teleport, currentPuzzle:GetPivot())
+		end
+		
+		if currentElevator and currentElevator:IsDescendantOf(workspace) then
+			spawn(teleport, currentElevator.Parent:GetPivot(), values.AutoPlay.Speed)
+			return fpp(currentElevator)
+		end
+		
+		local special = specialRooms[currentRoom.Name]
+		if special then
+			local ov = currentRoom:FindFirstChild("Entrances")
+			if ov then
+				ov = ov:FindFirstChild("OpenValue", true)
+				if not ov or not ov.Value then
+					return tpAndOpen()
+				end
+			end
+			
+			return special(currentRoom)
+		end
+		
+		tpAndOpen()
+	end
+
+	spawn(function()
+		while not window.Closed do
+			if values.AutoPlay.Enabled and not autohiding then
+				local s, e = pcall(autoplayLoop)
+				if not s then
+					warn(e)
+				end
+			end
+
+			wait((ping or 0) / 2)
+		end
+	end)
+end
+
 cons[#cons + 1] = lighting.ChildAdded:Connect(function(ch)
+	wait()
+	
 	if ch:IsA("Atmosphere") then
 		insert(bannedInstances, { ch, "Fog" })
 	end
@@ -1300,35 +1676,6 @@ end)
 for i, ch in lighting:GetChildren() do
 	if ch:IsA("Atmosphere") then
 		insert(bannedInstances, { ch, "Fog" })
-	end
-end
-
-local currentTool = char:GetAttribute("ToolName")
-if currentTool == "nil" then
-	currentTool = nil
-end
-
-local function equip(toolName)
-	local equip = eventsRFolder:FindFirstChild("Equip")
-	if equip and toolName ~= currentTool then
-		currentTool = toolName
-		equip:FireServer(toolName)
-	end
-end
-
-local function unequip(toolName)
-	local unequip = eventsRFolder:FindFirstChild("Unequip")
-	if unequip then
-		currentTool = nil
-		unequip:FireServer(toolName)
-	end
-end
-
-local function activate(toolName, ...)
-	local activate = eventsRFolder:FindFirstChild("Activate")
-	if activate then
-		equip(toolName)
-		activate:FireServer(toolName, ...)
 	end
 end
 
@@ -1635,11 +1982,13 @@ do
 			end
 		end
 		
+		autohiding = false
 		if values.Automation.Hide and #nodeMonsters > 0 and camera then
 			if not values.Automation.UseLockers then
 				if not isSafe(charPos) then
 					playerSpoofer.Enabled = true
 					playerSpoofer.OffsetCFrame = cfr(0, 200, 0)
+					autohiding = true
 				else
 					playerSpoofer.Enabled = false
 					playerSpoofer.OffsetCFrame = nil
@@ -1852,15 +2201,22 @@ do
 				fpp(v, 1, true, ping + 0.05, 24)
 			end
 		end
-
-		for i, v in cleanupTable(tables.Generators) do
+		
+		local gens = cleanupTable(tables.Generators)
+		for i = #gens, 1, -1 do
+			local v = gens[i]
+			local fixed = v.Fixed.Value
 			esp.new(v.Model, {
-				Visible = v.Fixed.Value < 100,
+				Visible = fixed < 100,
 				Text = "Generator"
 			}, "Generator")
-
-			if values.Automation.FixGenerators and (char:GetPivot().Position - v.Model:GetPivot().Position).Magnitude <= generatorDistance and v.Fixed.Value < 100 then
-				spawn(fixGenerator, v)
+			
+			if fixed < 100 then
+				if values.Automation.FixGenerators and (char:GetPivot().Position - v.Model:GetPivot().Position).Magnitude <= generatorDistance and v.Fixed.Value < 100 then
+					spawn(fixGenerator, v)
+				end
+			else
+				remove(gens, i)
 			end
 		end
 
@@ -1884,7 +2240,6 @@ do
 end
 
 spawn(function()
-	local currentPuzzle, r
 	local active = pipes.ActivePuzzles
 
 	while wait() and not window.Closed do
@@ -2017,6 +2372,7 @@ local function onInstance(v : Instance, alreadyExisted)
 		if pn == "Entrances" then -- door
 			if previousRoom and not endingRoomNames[previousRoom.Name] and not alreadyExisted then
 				lastDoor = v
+				currentRoom = p.Parent
 			end
 
 			if not alreadyExisted then
@@ -2233,6 +2589,8 @@ local function onInstance(v : Instance, alreadyExisted)
 					insert(tables[(isLight and "Light" or "") .. "Items"], v)
 				end
 			end
+		elseif pn == "Highlight" and p.Parent.Name:match("Elevator") then
+			currentElevator = v
 		end
 	elseif c == "Beam" then
 		if p.Parent == workspace and pc == "Part" and p:FindFirstChildOfClass("Sound") then -- some node monster
