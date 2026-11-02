@@ -3,7 +3,7 @@
 -- By Kawi
 
 local settings = {
-	Version = "2.15", -- autoplayer version
+	Version = "2.16", -- autoplayer version
 
 	Author = {
 		DiscordServer = "https://discord.gg/4bexJD6WVT",
@@ -512,7 +512,9 @@ function _keyPressLane(laneIndex, state)
 	end
 	
 	local kb = kbs[laneIndex]
-	if not kb then return end
+	if not kb then
+		return _fireLane(laneIndex, state)
+	end
 
 	kb = keyEnums[kb]
 	
@@ -1172,7 +1174,7 @@ local function hitNote(note, data, dist, sick, force)
 	end
 
 	if sick and s and s > 0 then
-		local t = isBehind and (s <= 1 and 0 or (sickOffset - dist) * (s - 1) - (0.001 + (lastOffset * 2))) or (s <= 1 and (dist * s) + (lastOffset / 1.5) or (dist + (sickOffset * (s - 1)) - (0.001 + (lastOffset * 2))))
+		local t = isBehind and (s <= 1 and 0 or (sickOffset - dist) * (s - 1) - (0.001 - lastOffset)) or (s <= 1 and (dist * s) + (lastOffset / 1.5) or (dist + (sickOffset * (s - 1)) - (0.001 + (lastOffset * 2))))
 		if t > 0 then
 			wait(t)
 		end
@@ -1355,12 +1357,6 @@ end)
 
 local function statsAdded(stats, cons)
 	if stats:FindFirstChild("Title") then return end
-	
-	cons[#cons + 1] = stats.Changed:Connect(function()
-		side = stats.Position.X.Scale < 0.5 and "Left" or "Right"
-	end)
-	
-	side = stats.Position.X.Scale < 0.5 and "Left" or "Right"
 
 	local row = stats:WaitForChild("Combo"):Clone()
 	local rows = { }
@@ -1475,6 +1471,16 @@ songStarted:Connect(function(sharedData)
 	cons[#cons + 1] = hud.ChildAdded:Connect(function(child)
 		if child.Name == "Stats" then
 			statsAdded(child, cons)
+		elseif child.Name == "Scores" then
+			while true do
+				local me = child:FindFirstChild(plr.Name, true)
+				if not me then
+					wait()
+				else
+					side = me.Parent.Name
+					break
+				end
+			end
 		end
 	end)
 
