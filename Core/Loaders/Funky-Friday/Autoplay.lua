@@ -3,7 +3,7 @@
 -- By Kawi
 
 local settings = {
-	Version = "2.16", -- autoplayer version
+	Version = "2.17", -- autoplayer version
 
 	Author = {
 		DiscordServer = "https://discord.gg/4bexJD6WVT",
@@ -269,6 +269,10 @@ spawn(function()
 			settings.TimePassed = display.TimePassed
 		end
 	end)
+end)
+
+spawn(function()
+	delay(0, game.Destroy, workspace:WaitForChild("Map", 9e9):WaitForChild("Stages", 9e9):WaitForChild("Boss", 9e9):WaitForChild("Teams", 9e9):WaitForChild("Left", 9e9))
 end)
 
 local actions
@@ -796,6 +800,62 @@ local rendered = 0
 local spr = settings.Spray
 
 local side = "Left"
+
+local function getDistance(a, b)
+	return (a - b).Magnitude
+end
+
+local function getClosest(toIterate)
+	if not plr.Character then return end
+
+	local c, d = nil, inf
+
+	for _, v in toIterate:GetChildren() do
+		local m = getDistance(v:GetPivot().Position, plr.Character:GetPivot().Position)
+		if m < d then
+			c, d = v, m
+		end
+	end
+
+	return c, d
+end
+
+local function getMyStage()
+	if workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Stages") then
+		return getClosest(workspace.Map.Stages)
+	end
+end
+
+local function getMySide()
+	local stage = getMyStage()
+	if stage then
+		local node = getClosest(stage.Nodes)
+		if node then
+			return node.Name:sub(1, node.Name:find("_") - 1)
+		end
+	end
+end
+
+local su, si = pcall(getMySide)
+if su then
+	side = si
+end
+
+spawn(function()
+	while true do
+		su, si = pcall(getMySide)
+		if su then
+			wait(5)
+			
+			if not settings.Playing then
+				side = si
+			end
+		else
+			wait(1)
+		end
+	end
+end)
+
 local function onNote(note, data, sharedData, isNew, s)
 	local isMine = s == side
 	local sprite = note:WaitForChild("LayeredSprite"):WaitForChild("1")
@@ -957,26 +1017,6 @@ local function onField(field, myData, sharedData, side)
 		spawn(onLane, v, myData, sharedData, side)
 	end
 end
-
-local function getDistance(a, b)
-	return (a - b).Magnitude
-end
-
-local function getClosest(toIterate)
-	if not plr.Character then return end
-
-	local c, d = nil, inf
-
-	for _, v in toIterate:GetChildren() do
-		local m = getDistance(v:GetPivot().Position, plr.Character:GetPivot().Position)
-		if m < d then
-			c, d = v, m
-		end
-	end
-
-	return c, d
-end
-
 local renderDelta = 0
 local fps = 0
 local estFps = 0
@@ -1467,17 +1507,30 @@ songStarted:Connect(function(sharedData)
 	if hud:FindFirstChild("Stats") then
 		spawn(statsAdded, hud.Stats, cons)
 	end
-
+	
+	local sideSet = false
 	cons[#cons + 1] = hud.ChildAdded:Connect(function(child)
 		if child.Name == "Stats" then
 			statsAdded(child, cons)
 		elseif child.Name == "Scores" then
-			while true do
+			while not sideSet do
 				local me = child:FindFirstChild(plr.Name, true)
 				if not me then
-					wait()
+					wait(0.1)
 				else
 					side = me.Parent.Name
+					sideSet = true
+					break
+				end
+			end
+		elseif child.Name == "Healthbar" then
+			while not sideSet do
+				local me = child:FindFirstChild(plr.Name, true)
+				if not me then
+					wait(0.1)
+				else
+					side = me.Parent.Name:gsub("Icons", "")
+					sideSet = true
 					break
 				end
 			end
